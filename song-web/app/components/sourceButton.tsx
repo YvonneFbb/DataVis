@@ -31,7 +31,7 @@ const SourcePopup: React.FC<PopupProps> = ({ onClose }) => {
         </ul>
       </div>
     </div>,
-    document.getElementById('portal-root') as HTMLElement
+    document.getElementById('source_popup') as HTMLElement
   );
 };
 

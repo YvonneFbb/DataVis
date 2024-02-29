@@ -62,7 +62,7 @@
   }
 
   html .buttons button.next {
-    border-right-color: #1a65b8;
+    border-right-color: #A2483D;
     right: 0;
   }
 
@@ -71,7 +71,7 @@
   }
 
   html .buttons button.previous {
-    border-left-color: #1a65b8;
+    border-left-color: #A2483D;
   }
 }
 
@@ -326,13 +326,15 @@ html {
 
 @media (min-width: 1024px) {
   .header {
+    display: flex;
+    justify-content: space-between;
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     height: 42px;
     line-height: 40px;
-    z-index: 3
+    z-index: 3;
   }
 
   .header__title {
@@ -954,20 +956,24 @@ html {
   display: block;
   width: 100%;
   max-width: 500px;
-  margin: 0 auto;
-  text-decoration: none
+  /* margin: 0 auto; */
+  /* text-decoration: none */
 }
 
 @media (min-width: 1024px) {
   .logo-container {
-    display: block;
+    display: inline-block;
     width: 25%;
   }
 }
 
 .logo {
-  vertical-align: middle;
+  height: 30px;
+  margin-top: 4px;
   background-image: url(/logo.jpg);
+  background-size: contain;
+  background-position: top right;
+  background-repeat: no-repeat;
 }
 
 /* 
@@ -1766,11 +1772,11 @@ html {
 }
 
 .intro-area--top .intro-slice {
-  background-image: url(https://s3.amazonaws.com/wsjcsbucket/hubs/pimco_76319/corbis-top.jpg)
+  background-image: url(/1.jpg)
 }
 
 .intro-area--bottom .intro-slice {
-  background-image: url(https://s3.amazonaws.com/wsjcsbucket/hubs/pimco_76319/fed-bottom-bw.jpg)
+  background-image: url(/2.jpg)
 }
 
 .intro--idle .intro-area--bottom .intro-slice,

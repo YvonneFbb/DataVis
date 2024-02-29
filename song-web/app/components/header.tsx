@@ -1,3 +1,5 @@
+'use client'
+
 import { SourceButton } from "./sourceButton";
 
 export function Header() {

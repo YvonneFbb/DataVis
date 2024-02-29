@@ -1,6 +1,34 @@
-export function Intro() {
+'use client'
+
+import { useEffect, useState } from "react";
+
+export function Contents() {
+  const [introClass, setIntroClass] = useState('intro intro--idle');
+
+  const introEnds = () => {
+    setIntroClass('intro intro--exit intro--idle');
+    setTimeout(() => {
+      document.body.classList.remove('visual-intro-active');
+    }, 1500);
+  };
+
+
   return (
-    <section className="intro intro--idle">
+    <>
+      <Intro introClass={introClass} introEnds={introEnds} />
+      <Story />
+    </>
+  )
+}
+
+interface IntroProps {
+  introClass: string;
+  introEnds: () => void;
+}
+
+function Intro({ introClass, introEnds }: IntroProps) {
+  return (
+    <section className={introClass} onClick={introEnds}>
       <div className="intro-area intro-area--top">
         <div className="intro-slice intro-slice--1"></div>
         <div className="intro-slice intro-slice--2"></div>
@@ -45,5 +73,20 @@ export function Intro() {
       </div>
       <div className="intro-area intro-area--right"></div>
     </section>
+  )
+}
+
+function Story() {
+  return (
+    <div className="story-container">
+      <div className="buttons">
+        <button className="previous">Previous</button>
+        <div className="select-box-wrapper">
+          <div className="select-box-arrow"></div>
+          <select id="eventSelector" name="eventSelector" className="select-box"></select>
+        </div>
+      <button className="next">Next</button>
+      </div>
+    </div>
   )
 }
