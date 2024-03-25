@@ -8,7 +8,6 @@ export default function Home() {
       <Header />
       <Contents />
       <div id="source_popup"></div>
-      <div id="story_teller"></div>
     </body>
   );
 }

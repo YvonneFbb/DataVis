@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Timeline, TimelineEvent } from "./timeline";
 
 export function Contents() {
   const [introClass, setIntroClass] = useState('intro intro--idle');
@@ -77,6 +78,11 @@ function Intro({ introClass, introEnds }: IntroProps) {
 }
 
 function Story() {
+  const events: TimelineEvent[] = [
+    { date: '1951-03-01', name: 'Fed Accord Signing' },
+    { date: '1951-07-01', name: 'Korean War Begins' },
+  ];
+
   return (
     <div className="story-container">
       <div className="buttons">
@@ -85,7 +91,21 @@ function Story() {
           <div className="select-box-arrow"></div>
           <select id="eventSelector" name="eventSelector" className="select-box"></select>
         </div>
-      <button className="next">Next</button>
+        <button className="next">Next</button>
+      </div>
+      <div id="chart-wrapper">
+        <div className="fbb-chrat-container">
+          <Timeline events={events} />
+        </div>
+      </div>
+      <div className="legends">
+        <p className="legends-title">数据选择</p>
+        <ul className="fbb-legend-container">
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-ffr" id="checkbox-ffr" name="checkbox-ffr" ></input>
+            <label htmlFor="checkbox-ffr">宋朝皇帝</label>
+          </li>
+        </ul>
       </div>
     </div>
   )
