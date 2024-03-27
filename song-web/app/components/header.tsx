@@ -8,7 +8,7 @@ export function Header() {
       <div className="header__button-container">
         <SourceButton />
       </div>
-      <div className="logo-container">
+      <div className="header__logo-container">
         <div className="logo"></div>
       </div>
     </header>

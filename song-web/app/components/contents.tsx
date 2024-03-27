@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from "react";
-import { Timeline, TimelineEvent } from "./timeline";
+import { EventType, Timeline, TimelineEvent } from "./timeline";
 
 export function Contents() {
   const [introClass, setIntroClass] = useState('intro intro--idle');
@@ -16,7 +16,7 @@ export function Contents() {
 
   return (
     <>
-      <Intro introClass={introClass} introEnds={introEnds} />
+      {/* <Intro introClass={introClass} introEnds={introEnds}/> */}
       <Story />
     </>
   )
@@ -31,14 +31,10 @@ function Intro({ introClass, introEnds }: IntroProps) {
   return (
     <section className={introClass} onClick={introEnds}>
       <div className="intro-area intro-area--top">
-        <div className="intro-slice intro-slice--1"></div>
-        <div className="intro-slice intro-slice--2"></div>
-        <div className="intro-slice intro-slice--3"></div>
-        <div className="intro-slice intro-slice--4"></div>
       </div>
-      <div className="intro-text-container intro-text-container--left">
-        <div className="intro-text">
-          <div className="intro__date intro__date--small-screen">557 - 1368</div>
+      <div className="intro__text-container intro__text-container--left">
+        <div className="intro__text">
+          {/* <div className="intro__date intro__date--small-screen">557 - 1368</div> */}
           <div className="intro-text__paragraph">
             <p className="text-style p">
               宋代刻本之美在于字体、板式。我们特地整理分析了宋刻板中楷书字体的发展时间史及江浙、四川、福建三地宋刻本中楷书字体的异同和字体倾向，以数据可视化的形式展示楷书及宋刻本书体演变史。
@@ -51,20 +47,20 @@ function Intro({ introClass, introEnds }: IntroProps) {
       </div>
       <div className="intro-area intro-area--left"></div>
       <div className="intro-area intro-area--bottom"></div>
-      <div className="intro-text-container intro-text-container--right">
+      <div className="intro__text-container intro__text-container--right">
         <h2 className="text-style heading1">
-          <span className="intro-text intro-text__title intro-text__title--first">
+          <span className="intro__text intro-text__title intro-text__title--first">
             楷书书体
           </span>
-          <span className="intro-text intro-text__title intro-text__title--second">
+          <span className="intro__text intro-text__title intro-text__title--second">
             演变史
           </span>
         </h2>
         <h3 className="text-style heading3">
-          <span className="intro-text intro-text__sub-title intro-text__sub-title--first">
+          <span className="intro__text intro-text__sub-title intro-text__sub-title--first">
             两宋时期
           </span>
-          <span className="intro-text intro-text__sub-title intro-text__sub-title--second">
+          <span className="intro__text intro-text__sub-title intro-text__sub-title--second">
             宋版书
           </span>
         </h3>
@@ -79,31 +75,69 @@ function Intro({ introClass, introEnds }: IntroProps) {
 
 function Story() {
   const events: TimelineEvent[] = [
-    { date: '1951-03-01', name: 'Fed Accord Signing' },
-    { date: '1951-07-01', name: 'Korean War Begins' },
+    { name: 'test1', year: 55, ty: EventType.Empire },
   ];
 
   return (
     <div className="story-container">
       <div className="buttons">
         <button className="previous">Previous</button>
-        <div className="select-box-wrapper">
-          <div className="select-box-arrow"></div>
-          <select id="eventSelector" name="eventSelector" className="select-box"></select>
-        </div>
         <button className="next">Next</button>
       </div>
       <div id="chart-wrapper">
-        <div className="fbb-chrat-container">
-          <Timeline events={events} />
+        <div className="event-box-container">
+          <div className="event-box">
+            <p className="event-date">AD 000</p>
+            <p className="event-title">测试文字</p>
+            <p className="event-content">测试文字</p>
+            <p className="event-content">
+              测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字
+            </p>
+            <img className="event-img" src="/test.jpg" />
+          </div>
+        </div>
+        <div className="chart-container">
+          <Timeline events={events} span={[0, 100]} />
         </div>
       </div>
       <div className="legends">
         <p className="legends-title">数据选择</p>
-        <ul className="fbb-legend-container">
+        <ul className="legend-container">
           <li className="legend-item">
-            <input type="checkbox" className="checkbox-ffr" id="checkbox-ffr" name="checkbox-ffr" ></input>
-            <label htmlFor="checkbox-ffr">宋朝皇帝</label>
+            <input type="checkbox" className="checkbox-empire" id="checkbox-empire" name="checkbox-empire" ></input>
+            <label htmlFor="checkbox-empire">宋朝皇帝</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-year" id="checkbox-year" name="checkbox-year" ></input>
+            <label htmlFor="checkbox-year">宋朝年号</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-artist" id="checkbox-artist" name="checkbox-artist" ></input>
+            <label htmlFor="checkbox-artist">楷书书法家</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-ou" id="checkbox-ou" name="checkbox-ou" ></input>
+            <label htmlFor="checkbox-ou">欧体</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-yan" id="checkbox-yan" name="checkbox-yan" ></input>
+            <label htmlFor="checkbox-yan">颜体</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-liu" id="checkbox-liu" name="checkbox-liu" ></input>
+            <label htmlFor="checkbox-liu">柳体</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-zhao" id="checkbox-zhao" name="checkbox-zhao" ></input>
+            <label htmlFor="checkbox-zhao">赵体</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-others" id="checkbox-others" name="checkbox-others" ></input>
+            <label htmlFor="checkbox-others">其他体</label>
+          </li>
+          <li className="legend-item">
+            <input type="checkbox" className="checkbox-overview" id="checkbox-overview" name="checkbox-overview" ></input>
+            <label htmlFor="checkbox-overview">南宋早中后期楷体概述</label>
           </li>
         </ul>
       </div>

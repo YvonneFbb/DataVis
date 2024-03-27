@@ -43,9 +43,9 @@ export const SourceButton = () => {
   const closePopup = () => setIsPopupOpen(false);
 
   return (
-    <div>
-      <button className="button button--clean" onClick={openPopup}>数据来源</button>
+    <>
+      <button className="button button-text" onClick={openPopup}>数据来源</button>
       {isPopupOpen && <SourcePopup onClose={closePopup} />}
-    </div>
+    </>
   );
 }
