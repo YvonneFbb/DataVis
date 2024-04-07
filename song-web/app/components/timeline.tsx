@@ -74,6 +74,11 @@ export function Timeline({ events, span, current }: TimelineProps) {
   }
 
   const updateZoomImg = () => {
+    const eventBox = d3.select(eventBoxRef.current);
+    if (eventBox.style('opacity') != '1') {
+      return;
+    }
+
     const eventZoomImg = d3.select(eventZoomRef.current);
 
     if (eventZoomImg.style('visibility') == 'visible') {
@@ -377,29 +382,36 @@ export function Timeline({ events, span, current }: TimelineProps) {
       const event = keyContent as TimelineEvent;
       if (event.ty == EventType.Content) {
         const eventBox = d3.select(eventBoxRef.current);
-        const eventImg = d3.select(eventBgRef.current);
+        const eventBgImg = d3.select(eventBgRef.current);
         const eventZoomImg = d3.select(eventZoomRef.current);
+        const eventX = xScaleRef.current(event.year);
 
         eventBox.select('.event-date').text('AD' + event.year);
         eventBox.select('.event-title').text(event.name);
         eventBox.select('.event-content').text(event.desc);
         eventBox.select('.event-img').attr('src', srcPath + event.src);
 
-        eventImg.select('.event-bg-img').attr('src', srcPath + event.src);
+        eventBgImg.select('.event-bg-img').attr('src', srcPath + event.src);
         eventZoomImg.select('.event-zoom-img').attr('src', srcPath + event.src);
 
+        if (eventX > 0.5 * windowWidth) {
+          eventBox.style('left', (eventX - 0.42 * windowWidth) + 'px');
+        } else {
+          eventBox.style('left', eventX + 'px');
+        }
+
         eventBox.style('opacity', 1);
-        eventImg.style('opacity', 1);
+        eventBgImg.style('opacity', 1);
         document.getElementById('body')?.classList.add('content');
       }
     } else {
       const eventBox = d3.select(eventBoxRef.current);
-      const eventImg = d3.select(eventBgRef.current);
+      const eventBgImg = d3.select(eventBgRef.current);
 
       eventBox.style('opacity', 0);
-      eventImg.style('opacity', 0);
-      document.getElementById('body')?.classList.remove('content');
+      eventBgImg.style('opacity', 0);
 
+      document.getElementById('body')?.classList.remove('content');
     }
   }, [keyContent])
 
