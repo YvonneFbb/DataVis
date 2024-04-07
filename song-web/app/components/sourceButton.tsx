@@ -20,11 +20,11 @@ const SourcePopup: React.FC<PopupProps> = ({ onClose }) => {
 
   return ReactDOM.createPortal(
     <div className='popup'>
-      <div className="popup__content">
+      <div className="popup-content">
         <button className="popup-close" type="button" data-dismiss="popup" aria-label="Close" onClick={onClose}>
           <span aria-hidden="true" className="popup-aria-hidden">&times;</span>
         </button>
-        <h2 className="popup__title">数据来源</h2>
+        <h2 className="popup-title">数据来源</h2>
         <h3>参考文献：</h3>
         <ul>
           <li>刘元堂.宋代版刻书法研究[D].南京艺术学院,2012.</li>
@@ -44,7 +44,7 @@ export const SourceButton = () => {
 
   return (
     <>
-      <button className="button button-text" onClick={openPopup}>数据来源</button>
+      <button className="source-button source-button-text flip-color-text" onClick={openPopup}>数据来源</button>
       {isPopupOpen && <SourcePopup onClose={closePopup} />}
     </>
   );

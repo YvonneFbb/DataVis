@@ -1,40 +1,36 @@
 'use client'
 
+import * as d3 from 'd3';
 import { useEffect, useRef, useState } from "react";
-import { EventType, Timeline, TimelineEvent } from "./timeline";
+import { EventType, LoadEvents, TimelineEvent, TimeLineEvents } from "./events";
+import { Timeline } from "./timeline";
 
 export function Contents() {
-  const [introClass, setIntroClass] = useState('intro intro--idle');
-
-  const introEnds = () => {
-    setIntroClass('intro intro--exit intro--idle');
-    setTimeout(() => {
-      document.body.classList.remove('visual-intro-active');
-    }, 1500);
-  };
-
-
   return (
     <>
-      {/* <Intro introClass={introClass} introEnds={introEnds}/> */}
+      <Intro />
       <Story />
     </>
   )
 }
 
-interface IntroProps {
-  introClass: string;
-  introEnds: () => void;
-}
+function Intro() {
+  const introRef = useRef<HTMLDivElement>(null);
 
-function Intro({ introClass, introEnds }: IntroProps) {
+  const handleOnClick = () => {
+    const intro = d3.select(introRef.current);
+    intro.transition().duration(800).style('opacity', 0)
+      .end().then(() => {
+        intro.style('display', 'none');
+      });
+  }
+
   return (
-    <section className={introClass} onClick={introEnds}>
+    <div ref={introRef} className='intro intro--idle' onClick={handleOnClick}>
       <div className="intro-area intro-area--top">
       </div>
       <div className="intro__text-container intro__text-container--left">
         <div className="intro__text">
-          {/* <div className="intro__date intro__date--small-screen">557 - 1368</div> */}
           <div className="intro-text__paragraph">
             <p className="text-style p">
               宋代刻本之美在于字体、板式。我们特地整理分析了宋刻板中楷书字体的发展时间史及江浙、四川、福建三地宋刻本中楷书字体的异同和字体倾向，以数据可视化的形式展示楷书及宋刻本书体演变史。
@@ -69,77 +65,83 @@ function Intro({ introClass, introEnds }: IntroProps) {
         </div>
       </div>
       <div className="intro-area intro-area--right"></div>
-    </section>
+    </div>
   )
 }
 
 function Story() {
-  const events: TimelineEvent[] = [
-    { name: 'test1', year: 55, ty: EventType.Empire },
-  ];
+  const events = LoadEvents();
+  const maxPage = events.length;
+  const [currentPage, setCurrentPage] = useState(0)
+
+  const switchRef = useRef<HTMLDivElement>(null);
+
+  const do_switch = (direction: number) => {
+    if (direction == 0) {
+      const swp = d3.select(switchRef.current).select('.previous');
+      const swn = d3.select(switchRef.current).select('.next');
+
+      swp.style('border-left-width', '200vw');
+      setTimeout(() => {
+        swn.style('border-right-width', '200vw');
+      }, 400)
+      setTimeout(() => {
+        swp.style('border-left-width', '0');
+      }, 800)
+      setTimeout(() => {
+        swn.style('border-right-width', '0');
+      }, 1200)
+    } else {
+      const swp = d3.select(switchRef.current).select('.previous');
+      const swn = d3.select(switchRef.current).select('.next');
+
+      swn.style('border-right-width', '200vw');
+      setTimeout(() => {
+        swp.style('border-left-width', '200vw');
+      }, 400)
+      setTimeout(() => {
+        swn.style('border-right-width', '0');
+      }, 800)
+      setTimeout(() => {
+        swp.style('border-left-width', '0');
+      }, 1200)
+    }
+  };
 
   return (
     <div className="story-container">
+      <div ref={switchRef} className='switch'>
+        <div className='previous'></div>
+        <div className='next'></div>
+      </div>
       <div className="buttons">
-        <button className="previous">Previous</button>
-        <button className="next">Next</button>
+        {currentPage > 0 ? (
+          <button className="previous" onClick={() => { do_switch(0); setTimeout(() => { setCurrentPage(currentPage - 1); }, 800) }}>Previous</button>
+        ) : (
+          <button disabled>Previous</button>
+        )}
+        {currentPage < maxPage - 1 ? (
+          <button className="next" onClick={() => { do_switch(1); setTimeout(() => { setCurrentPage(currentPage + 1); }, 800) }}>Next</button>
+        ) : (
+          <button disabled>Next</button>
+        )}
       </div>
       <div id="chart-wrapper">
-        <div className="event-box-container">
-          <div className="event-box">
-            <p className="event-date">AD 000</p>
-            <p className="event-title">测试文字</p>
-            <p className="event-content">测试文字</p>
-            <p className="event-content">
-              测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字
-            </p>
-            <img className="event-img" src="/test.jpg" />
-          </div>
-        </div>
         <div className="chart-container">
-          <Timeline events={events} span={[0, 100]} />
+          <div>
+            <div className="dash-line-1">
+              <span className="dashed-line-text">宋刻本</span>
+            </div>
+            <div className="dash-line-2"></div>
+            <div className="dash-line-3">
+              <span className="dashed-line-text">概述</span>
+            </div>
+            <div className="dash-line-4">
+              <span className="dashed-line-text">人物</span>
+            </div>
+          </div>
+          <Timeline events={events[currentPage].events} span={events[currentPage].span} current={currentPage} />
         </div>
-      </div>
-      <div className="legends">
-        <p className="legends-title">数据选择</p>
-        <ul className="legend-container">
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-empire" id="checkbox-empire" name="checkbox-empire" ></input>
-            <label htmlFor="checkbox-empire">宋朝皇帝</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-year" id="checkbox-year" name="checkbox-year" ></input>
-            <label htmlFor="checkbox-year">宋朝年号</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-artist" id="checkbox-artist" name="checkbox-artist" ></input>
-            <label htmlFor="checkbox-artist">楷书书法家</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-ou" id="checkbox-ou" name="checkbox-ou" ></input>
-            <label htmlFor="checkbox-ou">欧体</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-yan" id="checkbox-yan" name="checkbox-yan" ></input>
-            <label htmlFor="checkbox-yan">颜体</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-liu" id="checkbox-liu" name="checkbox-liu" ></input>
-            <label htmlFor="checkbox-liu">柳体</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-zhao" id="checkbox-zhao" name="checkbox-zhao" ></input>
-            <label htmlFor="checkbox-zhao">赵体</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-others" id="checkbox-others" name="checkbox-others" ></input>
-            <label htmlFor="checkbox-others">其他体</label>
-          </li>
-          <li className="legend-item">
-            <input type="checkbox" className="checkbox-overview" id="checkbox-overview" name="checkbox-overview" ></input>
-            <label htmlFor="checkbox-overview">南宋早中后期楷体概述</label>
-          </li>
-        </ul>
       </div>
     </div>
   )
