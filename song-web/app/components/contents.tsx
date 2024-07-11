@@ -2,6 +2,8 @@
 
 import * as d3 from 'd3';
 import { useEffect, useRef, useState } from "react";
+
+import { IntroCanvas } from "./canvas";
 import { EventType, LoadEvents, TimelineEvent, TimeLineEvents } from "./events";
 import { Timeline } from "./timeline";
 
@@ -9,65 +11,96 @@ export function Contents() {
   return (
     <>
       <Intro />
-      <Story />
+      {/* <Story /> */}
     </>
   )
 }
 
 function Intro() {
-  const introRef = useRef<HTMLDivElement>(null);
-
-  const handleOnClick = () => {
-    const intro = d3.select(introRef.current);
-    intro.transition().duration(800).style('opacity', 0)
-      .end().then(() => {
-        intro.style('display', 'none');
-      });
-  }
-
   return (
-    <div ref={introRef} className='intro intro--idle' onClick={handleOnClick}>
-      <div className="intro-area intro-area--top">
-      </div>
-      <div className="intro__text-container intro__text-container--left">
-        <div className="intro__text">
-          <div className="intro-text__paragraph">
-            <p className="text-style p">
+    <div style={{ width: '100vw', height: '100vh', position: 'relative', backgroundColor: '#161616' }}>
+      <IntroCanvas />
+      <div className='intro'>
+        <div className='intro-desc-container'>
+          <div className='intro-desc-left'>
+            <p className='intro-desc-text'>
               宋代刻本之美在于字体、板式。我们特地整理分析了宋刻板中楷书字体的发展时间史及江浙、四川、福建三地宋刻本中楷书字体的异同和字体倾向，以数据可视化的形式展示楷书及宋刻本书体演变史。
             </p>
           </div>
+          <div className='intro-desc-divider'></div>
+          <div className='intro-desc-right'>
+            <p className='intro-desc-text'>
+              两宋时期宋版书
+            </p>
+          </div>
         </div>
-        <div className="intro__date intro__date--large-screen">
-          1368
-        </div>
-      </div>
-      <div className="intro-area intro-area--left"></div>
-      <div className="intro-area intro-area--bottom"></div>
-      <div className="intro__text-container intro__text-container--right">
-        <h2 className="text-style heading1">
-          <span className="intro__text intro-text__title intro-text__title--first">
-            楷书书体
-          </span>
-          <span className="intro__text intro-text__title intro-text__title--second">
+        <div className='intro-title-container'>
+          <p className='intro-title-text'>
             演变史
-          </span>
-        </h2>
-        <h3 className="text-style heading3">
-          <span className="intro__text intro-text__sub-title intro-text__sub-title--first">
-            两宋时期
-          </span>
-          <span className="intro__text intro-text__sub-title intro-text__sub-title--second">
-            宋版书
-          </span>
-        </h3>
-        <div className="intro__date intro__date--large-screen">
-          557
+          </p>
+          <p className='intro-title-text'>
+            楷书书体
+          </p>
         </div>
       </div>
-      <div className="intro-area intro-area--right"></div>
     </div>
-  )
+  );
 }
+
+// function Intro() {
+//   const introRef = useRef<HTMLDivElement>(null);
+
+//   const handleOnClick = () => {
+//     const intro = d3.select(introRef.current);
+//     intro.transition().duration(800).style('opacity', 0)
+//       .end().then(() => {
+//         intro.style('display', 'none');
+//       });
+//   }
+
+//   return (
+//     <div ref={introRef} className='intro intro--idle' onClick={handleOnClick}>
+//       <div className="intro-area intro-area--top">
+//       </div>
+//       <div className="intro__text-container intro__text-container--left">
+//         <div className="intro__text">
+//           <div className="intro-text__paragraph">
+//             <p className="text-style p">
+//               宋代刻本之美在于字体、板式。我们特地整理分析了宋刻板中楷书字体的发展时间史及江浙、四川、福建三地宋刻本中楷书字体的异同和字体倾向，以数据可视化的形式展示楷书及宋刻本书体演变史。
+//             </p>
+//           </div>
+//         </div>
+//         <div className="intro__date intro__date--large-screen">
+//           1368
+//         </div>
+//       </div>
+//       <div className="intro-area intro-area--left"></div>
+//       <div className="intro-area intro-area--bottom"></div>
+//       <div className="intro__text-container intro__text-container--right">
+//         <h2 className="text-style heading1">
+//           <span className="intro__text intro-text__title intro-text__title--first">
+//             楷书书体
+//           </span>
+//           <span className="intro__text intro-text__title intro-text__title--second">
+//             演变史
+//           </span>
+//         </h2>
+//         <h3 className="text-style heading3">
+//           <span className="intro__text intro-text__sub-title intro-text__sub-title--first">
+//             两宋时期
+//           </span>
+//           <span className="intro__text intro-text__sub-title intro-text__sub-title--second">
+//             宋版书
+//           </span>
+//         </h3>
+//         <div className="intro__date intro__date--large-screen">
+//           557
+//         </div>
+//       </div>
+//       <div className="intro-area intro-area--right"></div>
+//     </div>
+//   )
+// }
 
 function Story() {
   const events = LoadEvents();

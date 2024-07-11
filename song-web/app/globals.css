@@ -360,7 +360,7 @@ html {
   .logo {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    /* justify-content: flex-end; */
     height: 100%;
     width: 100%;
   }
@@ -468,6 +468,77 @@ html {
 
 
 /* Intro Page Related */
+/* Intro Left Desc */
+@media (min-width: 1024px) {
+  .intro-desc-container {
+    position: absolute;      /* 绝对定位 */
+    display: flex;           /* 使用 Flexbox */
+    top: 50%;                /* 垂直方向上移至容器的50% */
+    height: 30%;             /* 高度固定 */
+    left: 5%;                /* 距离左边界5% */
+    transform: translateY(-50%); /* 通过变换向上偏移自身高度的50%，从而实现垂直居中 */
+    padding: 20px;           /* 内边距为20px，根据需要调整 */
+    overflow: hidden;        /* 防止内容溢出 */
+  }
+
+  .intro-desc-text {
+    font-family: 'MyCN_K';
+    color: #fff;
+    writing-mode: vertical-rl;
+  }
+
+  .intro-desc-left {
+    height: 100%;         /* 继承容器的高度 */
+    display: flex;        /* 使用 Flexbox */
+    justify-content: center; /* 水平居中 */
+  }
+
+  .intro-desc-left .intro-desc-text {
+    font-size: 16px;
+    line-height: 1.6;
+    color: rgba(162, 162, 162, 0.7);
+  }
+
+  .intro-desc-right {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .intro-desc-right .intro-desc-text {
+    font-size: 24px;
+    line-height: 1.6;
+  }
+
+  .intro-desc-divider {
+    width: 3px;                 /* 线的宽度 */
+    background-color: #fff;  /* 白色背景 */
+    height: 40px;
+  }
+}
+
+/* Intro Right Title */
+@media (min-width: 1024px) {
+  .intro-title-container {
+    position: absolute;
+    display: flex;
+    top: 40%;
+    right: 10%;
+    transform: translateY(-50%);
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  .intro-title-text {
+    font-family: 'MyCN_K';
+    font-size: 88px;
+    color: #fff;
+    writing-mode: vertical-rl;
+    margin: 50px;
+    letter-spacing: 10px;
+  }
+}
+
 /* Intro Area */
 @media (min-width: 1024px) {
   .intro-area {
@@ -634,8 +705,7 @@ html {
     padding: 0 24px;
     margin-bottom: 36px;
     overflow: hidden;
-    background-color: #2e2e2e;
-    z-index: 2
+    z-index: 2;
   }
 }
 
@@ -1329,7 +1399,7 @@ html {
 
 @media (min-width: 1024px) {
   .logo {
-    fill: #000;
+    fill: #fff;
     transition: fill 200ms ease;
   }
 
