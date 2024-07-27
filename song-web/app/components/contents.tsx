@@ -1,11 +1,23 @@
 'use client'
 
 import * as d3 from 'd3';
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, createContext, useContext, MutableRefObject } from "react";
 
 import { IntroCanvas } from "./canvas";
 import { EventType, LoadEvents, TimelineEvent, TimeLineEvents } from "./events";
 import { Timeline } from "./timeline";
+
+interface OverallStatus {
+  /* Canvas Status Usage */
+  isLoaded: boolean;
+  isFinalSelected: boolean;
+  rotationSpeed: number;
+  initCubeSize: number;
+  cubeScale: number;
+  selectedID: number;
+}
+
+export const OverallContext = createContext<MutableRefObject<OverallStatus>>({} as MutableRefObject<OverallStatus>);
 
 export function Contents() {
   return (
@@ -17,6 +29,10 @@ export function Contents() {
 }
 
 function Intro() {
+
+  const clickEntryButton = (id: number) => {
+  }
+
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', backgroundColor: '#161616' }}>
       <IntroCanvas />
@@ -41,6 +57,14 @@ function Intro() {
           <p className='intro-title-text'>
             楷书书体
           </p>
+        </div>
+        <div className='intro-button-container'>
+          <button className='vertical-button vertical-button-first' onClick={() => { clickEntryButton(1) }}>开始探索时间轴</button>
+          <button className='vertical-button' onClick={() => { clickEntryButton(2) }}>南北朝</button>
+          <button className='vertical-button' onClick={() => { clickEntryButton(3) }}>隋朝</button>
+          <button className='vertical-button' onClick={() => { clickEntryButton(4) }}>唐朝</button>
+          <button className='vertical-button' onClick={() => { clickEntryButton(5) }}>宋朝</button>
+          <button className='vertical-button' onClick={() => { clickEntryButton(6) }}>元朝</button>
         </div>
       </div>
     </div>

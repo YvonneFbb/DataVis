@@ -5,9 +5,6 @@ import { SourceButton } from "./sourceButton";
 export function Header() {
   return (
     <header id="header" className="header">
-      {/* <div className="source-button-container">
-        <SourceButton />
-      </div> */}
       <div className="logo-container">
         <div className="logo">
           <svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200px" viewBox="0 0 2682 462">
@@ -49,6 +46,9 @@ export function Header() {
             </g>
           </svg>
         </div>
+      </div>
+      <div className="source-button-container">
+        <SourceButton />
       </div>
     </header>
   );

@@ -39,12 +39,16 @@ const SourcePopup: React.FC<PopupProps> = ({ onClose }) => {
 export const SourceButton = () => {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
 
-  const openPopup = () => setIsPopupOpen(true);
-  const closePopup = () => setIsPopupOpen(false);
+  const openPopup = () => {
+    setIsPopupOpen(true);
+  };
+  const closePopup = () => {
+    setIsPopupOpen(false);
+  };
 
   return (
     <>
-      <button className="source-button source-button-text flip-color-text" onClick={openPopup}>数据来源</button>
+      <button className="source-button source-button-text" onClick={openPopup}>数据来源</button>
       {isPopupOpen && <SourcePopup onClose={closePopup} />}
     </>
   );
