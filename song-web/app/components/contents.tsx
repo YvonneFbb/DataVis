@@ -15,22 +15,36 @@ interface OverallStatus {
   initCubeSize: number;
   cubeScale: number;
   selectedID: number;
+  selectedGID: number;
 }
 
 export const OverallContext = createContext<MutableRefObject<OverallStatus>>({} as MutableRefObject<OverallStatus>);
 
 export function Contents() {
+  const overallStatus = useRef<OverallStatus>({
+    isLoaded: false,
+    isFinalSelected: false,
+    rotationSpeed: 0.1,
+    initCubeSize: 2.5,
+    cubeScale: 1,
+    selectedID: -1,
+    selectedGID: -1,
+  });
+
   return (
-    <>
+    <OverallContext.Provider value={overallStatus}>
       <Intro />
       {/* <Story /> */}
-    </>
+    </OverallContext.Provider>
   )
 }
 
 function Intro() {
+  const overallStatus = useContext(OverallContext);
 
   const clickEntryButton = (id: number) => {
+    overallStatus.current.selectedID = id;
+    overallStatus.current.isFinalSelected = true;
   }
 
   return (

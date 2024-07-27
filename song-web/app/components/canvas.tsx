@@ -5,25 +5,16 @@ import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Texture, TextureLoader, Sprite as ThreeSprite, Raycaster, Intersection, Vector2, Vector3 } from "three";
 import { OverallContext } from "./contents";
 
-interface CanvasStatus {
-  isLoaded: boolean;
-  isFinalSelected: boolean;
-  rotationSpeed: number;
-  initCubeSize: number;
-  cubeScale: number;
-  selectedID: number;
-}
-
-const CanvasContext = createContext<MutableRefObject<CanvasStatus>>({} as MutableRefObject<CanvasStatus>);
-
 interface SpriteProps {
   initialPosition: [number, number, number];
   imagePath: string;
   opacity: number;
+  charID: number;
+  GroupID: number;
 }
 
-const Sprite: React.FC<SpriteProps> = ({ initialPosition, imagePath, opacity }) => {
-  const canvasStatus = useContext(CanvasContext);
+const Sprite: React.FC<SpriteProps> = ({ initialPosition, imagePath, opacity, charID, GroupID }) => {
+  const overallStatus = useContext(OverallContext);
 
   const texture = useLoader(TextureLoader, imagePath);
   const spriteRef = useRef<ThreeSprite>(null);
@@ -39,18 +30,18 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, imagePath, opacity }) 
 
   useFrame(({ camera }) => {
     if (spriteRef.current && !finalEnd.current) {
-      if (!canvasStatus.current.isFinalSelected) {
-        angle.current += 1 / 60 * canvasStatus.current.rotationSpeed;
+      if (!overallStatus.current.isFinalSelected) {
+        angle.current += 1 / 60 * overallStatus.current.rotationSpeed;
 
         // 更新位置
-        targetPosition.current.x = radius * Math.cos(angle.current) * canvasStatus.current.cubeScale;
-        targetPosition.current.y = radius * Math.sin(angle.current) * canvasStatus.current.cubeScale;
-        targetPosition.current.z = (initialPosition[2]) * canvasStatus.current.cubeScale;
+        targetPosition.current.x = radius * Math.cos(angle.current) * overallStatus.current.cubeScale;
+        targetPosition.current.y = radius * Math.sin(angle.current) * overallStatus.current.cubeScale;
+        targetPosition.current.z = (initialPosition[2]) * overallStatus.current.cubeScale;
 
         spriteRef.current.position.lerp(targetPosition.current, 0.1);
 
         // 选择操作
-        if (canvasStatus.current.selectedID == spriteRef.current.id) {
+        if (overallStatus.current.selectedID == charID) {
           spriteRef.current.scale.lerp(new Vector3(texture.image.width / 1000, texture.image.height / 1000, 1), 0.03);
           spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.1;
         } else {
@@ -61,7 +52,7 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, imagePath, opacity }) 
         // 应用新的位置
         spriteRef.current.lookAt(camera.position);
       } else {
-        if (true) {
+        if (overallStatus.current.selectedGID != GroupID) {
           // 不相关笔画
           finalSpeed.current += (2 - finalSpeed.current) * 0.02;
           finalScale.current += (5 - finalScale.current) * 0.02;
@@ -97,29 +88,30 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, imagePath, opacity }) 
   }, [texture]);
 
   return (
-    <sprite ref={spriteRef} position={initialPosition}>
+    <sprite ref={spriteRef} position={initialPosition} userData={{ "charID": charID, "groupID": GroupID }}>
       <spriteMaterial attach="material" map={texture} transparent opacity={opacity} alphaTest={0.2} />
     </sprite>
   );
 };
 
 const SpriteController = () => {
-  const canvasStatus = useContext(CanvasContext);
-  const initCubeSide = canvasStatus.current.initCubeSize;
+  const overallStatus = useContext(OverallContext);
+  const initCubeSide = overallStatus.current.initCubeSize;
 
-  const sprites = loadOneFace(CubeFace.Front, initCubeSide);
-  sprites.push(...loadOneFace(CubeFace.Back, initCubeSide));
-  sprites.push(...loadOneFace(CubeFace.Left, initCubeSide));
-  sprites.push(...loadOneFace(CubeFace.Right, initCubeSide));
-  sprites.push(...loadOneFace(CubeFace.Top, initCubeSide));
-  sprites.push(...loadOneFace(CubeFace.Bottom, initCubeSide));
+  const sprites = [];
+  sprites.push(...loadOneFace(CubeFace.Front, initCubeSide, 0, 0));
+  sprites.push(...loadOneFace(CubeFace.Left, initCubeSide, 1, 16));
+  sprites.push(...loadOneFace(CubeFace.Top, initCubeSide, 2, 32));
+  sprites.push(...loadOneFace(CubeFace.Back, initCubeSide, 0, 48));
+  sprites.push(...loadOneFace(CubeFace.Right, initCubeSide, 1, 64));
+  sprites.push(...loadOneFace(CubeFace.Bottom, initCubeSide, 2, 80));
 
   return sprites;
 }
 
 const CameraController = () => {
   const { scene, camera, gl } = useThree();
-  const canvasStatus = useContext(CanvasContext);
+  const overallStatus = useContext(OverallContext);
 
   // For select
   const mouse = useRef(new Vector2());
@@ -135,7 +127,7 @@ const CameraController = () => {
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
-      if (!(event.target as HTMLElement).className.startsWith('intro')) {
+      if (event.target instanceof HTMLElement && !(event.target as HTMLElement).className.startsWith('intro')) {
         // 跳过 popup 的内容
         return;
       }
@@ -146,7 +138,7 @@ const CameraController = () => {
       mouse.current.y = -(event.clientY / innerHeight) * 2 + 1;
 
       // 选择判断
-      if (!canvasStatus.current.isFinalSelected) {
+      if (!overallStatus.current.isFinalSelected) {
         raycaster.setFromCamera(mouse.current, camera);
         const intersects = raycaster.intersectObjects(scene.children);
         const intersect = getActualIntersect(intersects);
@@ -157,7 +149,7 @@ const CameraController = () => {
             // 正在选择状态
             if (obj != lastSelected.current) {
               // 选择了新对象
-              canvasStatus.current.selectedID = obj.id;
+              overallStatus.current.selectedID = obj.userData["charID"];
               lastSelected.current = obj;
 
             } else {
@@ -167,9 +159,9 @@ const CameraController = () => {
 
           } else {
             // 进入选择状态
-            canvasStatus.current.rotationSpeed = 0.02;
-            canvasStatus.current.cubeScale = 1.5;
-            canvasStatus.current.selectedID = obj.id;
+            overallStatus.current.rotationSpeed = 0.02;
+            overallStatus.current.cubeScale = 1.5;
+            overallStatus.current.selectedID = obj.userData["charID"];
 
             lastSelected.current = obj;
 
@@ -179,16 +171,16 @@ const CameraController = () => {
         } else {
           if (lastSelected.current) {
             // 退出选择
-            canvasStatus.current.rotationSpeed = 0.1;
+            overallStatus.current.rotationSpeed = 0.1;
 
             exitSelectTimeout.current = setTimeout(() => {
               if (!lastSelected.current) {
-                canvasStatus.current.cubeScale = 1;
+                overallStatus.current.cubeScale = 1;
               }
             }, 2000);
 
             lastSelected.current = null;
-            canvasStatus.current.selectedID = -1;
+            overallStatus.current.selectedID = -1;
 
           } else {
             // 无选择
@@ -206,11 +198,14 @@ const CameraController = () => {
 
   // 更新选择进度
   useFrame(() => {
-    if (!canvasStatus.current.isFinalSelected) {
-      if (canvasStatus.current.selectedID != -1) {
+    if (!overallStatus.current.isFinalSelected) {
+      if (overallStatus.current.selectedID != -1) {
         setSelectProgress(selectProgress >= 100 ? 100 : selectProgress + 1);
         if (selectProgress >= 100) {
-          canvasStatus.current.isFinalSelected = true;
+          overallStatus.current.isFinalSelected = true;
+          overallStatus.current.selectedGID = spriteCharGroups[overallStatus.current.selectedID];
+
+          console.log('Selected:', overallStatus.current.selectedID, overallStatus.current.selectedGID);
         }
       } else {
         setSelectProgress(selectProgress <= 0 ? 0 : selectProgress - 2);
@@ -220,7 +215,7 @@ const CameraController = () => {
 
   const phi = useRef(0);
   useFrame(() => {
-    if (!canvasStatus.current.isFinalSelected) {
+    if (!overallStatus.current.isFinalSelected) {
       // 根据鼠标纵向位置调整摄像机的俯仰角
       phi.current = (mouse.current.y * 0.25 + 0.5) * Math.PI; // 从 0.25π 到 0.75π，即从稍微向下到稍微向上
 
@@ -249,7 +244,6 @@ const CameraController = () => {
 
 
 const spriteLocations: [number, number][][] = [
-  // One Face
   [
     [38.17, 28.54],
     [75.03, 97.75],
@@ -268,21 +262,78 @@ const spriteLocations: [number, number][][] = [
     [206.77, 284.8],
     [276.11, 277.1],
   ],
+  [
+    [45.50, 23.39],
+    [21.60, 158.05],
+    [42.64, 263.11],
+    [100.08, 79.15],
+    [84.67, 116.63],
+    [105.61, 157.18],
+    [83.82, 253.65],
+    [169.72, 20.49],
+    [154.58, 154.36],
+    [192.83, 150.20],
+    [181.00, 253.87],
+    [257.47, 43.55],
+    [262.06, 88.44],
+    [231.03, 186.97],
+    [254.45, 214.79],
+    [273.45, 263.11],
+  ],
+  [
+    [25.75, 34.23],
+    [44.17, 84.02],
+    [44.17, 134.58],
+    [68.82, 199.92],
+    [79.23, 276.90],
+    [130.42, 28.54],
+    [112.54, 88.46],
+    [60.43, 206.74],
+    [142.13, 182.60],
+    [207.00, 112.46],
+    [179.37, 276.90],
+    [250.08, 23.70],
+    [220.08, 80.39],
+    [266.65, 174.50],
+    [271.21, 194.65],
+    [237.65, 254.92],
+  ]
+];
+
+const spriteCharGroups: number[] = [
+  // 0 ~ 15 Chars (Charset 1)
+  0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1,
+  // 16 ~ 31 Chars (Charset 2)
+  2, 2, 2, 3, 3, 3, 2, 3, 2, 2, 3, 2, 3, 3, 3, 2,
+  // 32 ~ 47 Chars (Charset 3)
+  4, 4, 5, 5, 4, 5, 5, 4, 5, 4, 4, 4, 5, 5, 5, 4,
+
+  // 48 ~ 63 Chars (Dup Charset 1)
+  0 + 6, 0 + 6, 1 + 6, 0 + 6, 1 + 6, 0 + 6, 1 + 6, 1 + 6, 0 + 6, 1 + 6, 0 + 6, 0 + 6, 1 + 6, 0 + 6, 1 + 6, 1 + 6,
+  // 64 ~ 79 Chars (Dup Charset 2)
+  2 + 6, 2 + 6, 2 + 6, 3 + 6, 3 + 6, 3 + 6, 2 + 6, 3 + 6, 2 + 6, 2 + 6, 3 + 6, 2 + 6, 3 + 6, 3 + 6, 3 + 6, 2 + 6,
+  // 80 ~ 95 Chars (Dup Charset 3)
+  4 + 6, 4 + 6, 5 + 6, 5 + 6, 4 + 6, 5 + 6, 5 + 6, 4 + 6, 5 + 6, 4 + 6, 4 + 6, 4 + 6, 5 + 6, 5 + 6, 5 + 6, 4 + 6,
+]
+
+const spriteGroupChars: number[][] = [
+  // Group 0 and 1
+  [0, 1, 3, 5, 8, 10, 11, 13], [2, 4, 6, 7, 9, 12, 14, 15],
+  // Group 2 and 3
+  [16, 17, 18, 22, 24, 25, 27, 31], [19, 20, 21, 23, 26, 28, 29, 30],
+  // Group 4 and 5
+  [32, 33, 36, 39, 41, 42, 43, 47], [34, 35, 37, 38, 40, 44, 45, 46],
+
+  // Group 6 and 7 (Dup 0 and 1)
+  [0 + 48, 1 + 48, 3 + 48, 5 + 48, 8 + 48, 10 + 48, 11 + 48, 13 + 48], [2 + 48, 4 + 48, 6 + 48, 7 + 48, 9 + 48, 12 + 48, 14 + 48, 15 + 48],
+  // Group 8 and 9 (Dup 2 and 3)
+  [16 + 48, 17 + 48, 18 + 48, 22 + 48, 24 + 48, 25 + 48, 27 + 48, 31 + 48], [19 + 48, 20 + 48, 21 + 48, 23 + 48, 26 + 48, 28 + 48, 29 + 48, 30 + 48],
+  // Group 10 and 11 (Dup 4 and 5)
+  [32 + 48, 33 + 48, 36 + 48, 39 + 48, 41 + 48, 42 + 48, 43 + 48, 47 + 48], [34 + 48, 35 + 48, 37 + 48, 38 + 48, 40 + 48, 44 + 48, 45 + 48, 46 + 48],
 ]
 
 export const IntroCanvas = () => {
-  const overallStatus = useContext(OverallContext);
-  const canvasStatus = useRef<CanvasStatus>({
-    isLoaded: false,
-    isFinalSelected: false,
-    rotationSpeed: 0.1,
-    initCubeSize: 2.5,
-    cubeScale: 1,
-    selectedID: -1,
-  });
-
-
-  return (<CanvasContext.Provider value={canvasStatus}><Canvas
+  return (<Canvas
     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'black' }}
     camera={{ position: [5, 0, 0], up: [0, 0, 1] }}
     id="intro-canvas"
@@ -292,11 +343,9 @@ export const IntroCanvas = () => {
     {/* <axesHelper args={[10]} /> */}
     <SpriteController />
     <CameraController />
-  </Canvas></CanvasContext.Provider>
+  </Canvas>
   )
 }
-
-
 
 // 方向枚举
 enum CubeFace {
@@ -349,15 +398,17 @@ function mapToCubeFace(locations: [number, number][], face: CubeFace, side: numb
   return mappedLocations;
 }
 
-function loadOneFace(face: CubeFace, side: number): JSX.Element[] {
-  const locations = spriteLocations[0];
+function loadOneFace(face: CubeFace, side: number, locIndex: number, startIndex: number): JSX.Element[] {
+  const locations = spriteLocations[locIndex];
   const mappedLocations = mapToCubeFace(locations, face, side);
 
   return mappedLocations.map((location, index) => {
     const [x, y, z] = location;
-    const imagePath = `/intro/${index + 1}.png`;
+    const imagePath = `/intro/${16 * locIndex + index + 1}.png`;
+    const id = startIndex + index;
 
-    return <Sprite key={index} initialPosition={[x, y, z]} imagePath={imagePath} opacity={0.6} />;
+    return <Sprite key={id} initialPosition={[x, y, z]} imagePath={imagePath} opacity={0.6}
+      charID={id} GroupID={spriteCharGroups[id]} />;
   });
 }
 

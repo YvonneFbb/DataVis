@@ -297,6 +297,28 @@ html {
   padding: 0 24px
 }
 
+@keyframes popUpFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(5px);
+  }
+}
+
+@keyframes popUpFadeOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(5px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+
 /* Header Related */
 @media (min-width: 1024px) {
   .header {
@@ -370,6 +392,11 @@ html {
     z-index: 5;
     padding: 48;
     overflow: auto;
+    animation: popUpFadeIn 0.5s; /* 初始淡入动画 */
+  }
+
+  .popup.fade-out {
+    animation: popUpFadeOut 0.5s forwards; /* 淡出动画 */
   }
 
   .popup ul {
@@ -420,10 +447,13 @@ html {
     right: 0;
     bottom: 0;
     left: 0;
-    backdrop-filter: blur(5px);
-    /* 添加模糊效果 */
-    /* z-index: 5; */
     cursor: pointer;
+    backdrop-filter: blur(5px);
+    animation: popUpFadeIn 0.5s; /* 初始淡入动画 */
+  }
+
+  .popup:before.fade-out {
+    animation: popUpFadeOut 0.5s forwards; /* 淡出动画 */
   }
 
   .popup-close {

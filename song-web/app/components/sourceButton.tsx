@@ -4,22 +4,13 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 
 interface PopupProps {
-  onClose: () => void; // 关闭弹窗的函数
+  onClose: () => void;
+  isFadingOut?: boolean;
 }
 
-const SourcePopup: React.FC<PopupProps> = ({ onClose }) => {
-  // 使用useEffect来处理挂载和卸载逻辑
-  useEffect(() => {
-    // 确保滚动被禁用，或者进行其他需要的效果
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, []);
-
-
+const SourcePopup: React.FC<PopupProps> = ({ onClose, isFadingOut }) => {
   return ReactDOM.createPortal(
-    <div className='popup'>
+    <div className={`popup ${isFadingOut ? 'fade-out' : ''}`}>
       <div className="popup-content">
         <button className="popup-close" type="button" data-dismiss="popup" aria-label="Close" onClick={onClose}>
           <span aria-hidden="true" className="popup-aria-hidden">&times;</span>
@@ -38,18 +29,23 @@ const SourcePopup: React.FC<PopupProps> = ({ onClose }) => {
 
 export const SourceButton = () => {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
 
   const openPopup = () => {
     setIsPopupOpen(true);
   };
   const closePopup = () => {
-    setIsPopupOpen(false);
+    setIsFadingOut(true);
+    setTimeout(() => {
+      setIsFadingOut(false);
+      setIsPopupOpen(false);
+    }, 550);
   };
 
   return (
     <>
       <button className="source-button source-button-text" onClick={openPopup}>数据来源</button>
-      {isPopupOpen && <SourcePopup onClose={closePopup} />}
+      {isPopupOpen && <SourcePopup onClose={closePopup} isFadingOut={isFadingOut} />}
     </>
   );
 }
