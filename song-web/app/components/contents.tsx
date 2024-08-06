@@ -8,8 +8,10 @@ import { EventType, LoadEvents, TimelineEvent, TimeLineEvents } from "./events";
 import { Timeline } from "./timeline";
 
 interface OverallStatus {
+  /* Intro Status */
+  isIntroEnd: boolean;
   /* Canvas Status Usage */
-  isLoaded: boolean;
+  isCanvasLoaded: boolean;
   isFinalSelected: boolean;
   rotationSpeed: number;
   initCubeSize: number;
@@ -22,7 +24,9 @@ export const OverallContext = createContext<MutableRefObject<OverallStatus>>({} 
 
 export function Contents() {
   const overallStatus = useRef<OverallStatus>({
-    isLoaded: false,
+    isIntroEnd: false,
+
+    isCanvasLoaded: false,
     isFinalSelected: false,
     rotationSpeed: 0.1,
     initCubeSize: 2.5,
@@ -31,20 +35,29 @@ export function Contents() {
     selectedGID: -1,
   });
 
+  const [isIntroEnd, setIsIntroEnd] = useState(false);
+  const introShallEnd = () => {
+    // setIsIntroEnd(true);
+  }
+
   return (
     <OverallContext.Provider value={overallStatus}>
-      <Intro />
-      {/* <Story /> */}
+      {!isIntroEnd && <Intro shallEnd={introShallEnd} />}
+      {isIntroEnd && <Story />}
     </OverallContext.Provider>
   )
 }
 
-function Intro() {
+interface IntroProps {
+  shallEnd: () => void;
+}
+
+function Intro({ shallEnd }: IntroProps) {
   const overallStatus = useContext(OverallContext);
 
   const clickEntryButton = (id: number) => {
-    overallStatus.current.selectedID = id;
-    overallStatus.current.isFinalSelected = true;
+    overallStatus.current.isIntroEnd = true;
+    shallEnd();
   }
 
   return (
