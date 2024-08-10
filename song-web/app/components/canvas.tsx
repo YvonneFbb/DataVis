@@ -43,7 +43,7 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
         targetPosition.current.y = radius * Math.sin(angle.current) * overallStatus.current.cubeScale;
         targetPosition.current.z = (initialPosition[2]) * overallStatus.current.cubeScale;
 
-        // spriteRef.current.position.lerp(targetPosition.current, 0.1);
+        spriteRef.current.position.lerp(targetPosition.current, 0.1);
 
         // 选择操作
         if (overallStatus.current.selectedID == charID) {
@@ -79,6 +79,7 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
           spriteRef.current.position.lerp(targetPosition.current, 0.05);
         } else {
           // 留存笔画
+          spriteRef.current.scale.lerp(new Vector3(texture.image.width / 1500, texture.image.height / 1500, 1), 0.05);
           spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.01;
           spriteRef.current.position.lerp(new Vector3(finalPosition[0], finalPosition[1], finalPosition[2]), 0.01);
         }
@@ -215,6 +216,19 @@ const CameraController = () => {
         if (selectProgress >= 100) {
           overallStatus.current.isFinalSelected = true;
           overallStatus.current.selectedGID = spriteCharGroups[overallStatus.current.selectedID];
+
+          setTimeout(() => {
+            const introRef = overallStatus.current.introRef.current!;
+            const buttonBox = introRef.querySelector('.intro-button-container') as HTMLElement;
+
+            buttonBox.classList.remove('show');
+          }, 1000 * 1);
+          setTimeout(() => {
+            const introRef = overallStatus.current.introRef.current!;
+            const charBox = introRef.querySelector('.intro-chardesc-container') as HTMLElement;
+
+            charBox.classList.add('show');
+          }, 1000 * 2.5);
         }
       } else {
         setSelectProgress(selectProgress <= 0 ? 0 : selectProgress - 2);
@@ -225,33 +239,41 @@ const CameraController = () => {
   const phi = useRef(0);
   const viewOffsetX = useRef(0);
   useFrame(() => {
-    if (!overallStatus.current.isFinalSelected) {
-      // 根据鼠标纵向位置调整摄像机的俯仰角
-      phi.current = (0.08 - mouse.current.y * 0.20) * Math.PI;
+    if (!finalEnd.current) {
+      if (!overallStatus.current.isFinalSelected) {
+        // 根据鼠标纵向位置调整摄像机的俯仰角
+        phi.current = (mouse.current.y * 0.25 + 0.5) * Math.PI; // 从 0.25π 到 0.75π，即从稍微向下到稍微向上
 
-      targetPosition.current.x = radius * Math.cos(phi.current);
-      targetPosition.current.y = 0;
-      targetPosition.current.z = radius * Math.sin(phi.current);
+        targetPosition.current.x = radius * Math.sin(phi.current);
+        targetPosition.current.y = 0;
+        targetPosition.current.z = radius * Math.cos(phi.current);
 
-      // 使用 Lerp 实现平滑过渡
-      camera.position.lerp(targetPosition.current, 0.005); // 0.01 是插值因子，决定了移动的速度和平滑程度
-      camera.lookAt(0, 0, 0); // 摄像机始终朝向原点
-    } else {
-      // look setting: [0, 0, 5] & [0, 1, 0]
-      phi.current += (Math.PI / 2 - phi.current) * 0.1;
-      viewOffsetX.current += (500 - viewOffsetX.current) * 0.05;
+        // 使用 Lerp 实现平滑过渡
+        camera.position.lerp(targetPosition.current, 0.005); // 0.01 是插值因子，决定了移动的速度和平滑程度
+        camera.lookAt(0, 0, 0); // 摄像机始终朝向原点
+      } else {
+        if (!reachFinal.current) {
+          reachFinal.current = true;
+          setTimeout(() => {
+            finalEnd.current = true;
+          }, 1000 * 15);
+        }
+        phi.current += (Math.PI / 2 - phi.current) * 0.1;
+        viewOffsetX.current += (400 - viewOffsetX.current) * 0.05;
 
-      targetPosition.current.x = radius * Math.cos(phi.current);
-      targetPosition.current.y = 0;
-      targetPosition.current.z = radius * Math.sin(phi.current);
+        targetPosition.current.x = (radius + 2) * Math.cos(phi.current);
+        targetPosition.current.y = 0;
+        targetPosition.current.z = (radius + 2) * Math.sin(phi.current);
 
-      // 使用 Lerp 实现平滑过渡
-      camera.setViewOffset(canvas.width, canvas.height, viewOffsetX.current, 0, canvas.width, canvas.height);
-      camera.position.lerp(targetPosition.current, 0.02);
-      camera.up.lerp(new Vector3(0, 1, 0), 0.01);
-      camera.lookAt(0, 0, 0);
+        // 使用 Lerp 实现平滑过渡
+        camera.setViewOffset(canvas.width, canvas.height, viewOffsetX.current, 0, canvas.width, canvas.height);
+        camera.position.lerp(targetPosition.current, 0.02);
+        camera.up.lerp(new Vector3(0, 1, 0), 0.01);
+        camera.lookAt(0, 0, 0);
+      }
     }
   });
+
 
   return null;
 };
@@ -406,8 +428,6 @@ const Cube = () => {
     </lineSegments>
   );
 };
-
-
 
 export const IntroCanvas = () => {
   return (<Canvas

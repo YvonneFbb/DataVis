@@ -302,6 +302,7 @@ html {
     opacity: 0;
     backdrop-filter: blur(0px);
   }
+
   to {
     opacity: 1;
     backdrop-filter: blur(5px);
@@ -313,6 +314,7 @@ html {
     opacity: 1;
     backdrop-filter: blur(5px);
   }
+
   to {
     opacity: 0;
     backdrop-filter: blur(0px);
@@ -392,11 +394,13 @@ html {
     z-index: 5;
     padding: 48;
     overflow: auto;
-    animation: popUpFadeIn 0.5s; /* 初始淡入动画 */
+    animation: popUpFadeIn 0.5s;
+    /* 初始淡入动画 */
   }
 
   .popup.fade-out {
-    animation: popUpFadeOut 0.5s forwards; /* 淡出动画 */
+    animation: popUpFadeOut 0.5s forwards;
+    /* 淡出动画 */
   }
 
   .popup ul {
@@ -449,11 +453,13 @@ html {
     left: 0;
     cursor: pointer;
     backdrop-filter: blur(5px);
-    animation: popUpFadeIn 0.5s; /* 初始淡入动画 */
+    animation: popUpFadeIn 0.5s;
+    /* 初始淡入动画 */
   }
 
   .popup:before.fade-out {
-    animation: popUpFadeOut 0.5s forwards; /* 淡出动画 */
+    animation: popUpFadeOut 0.5s forwards;
+    /* 淡出动画 */
   }
 
   .popup-close {
@@ -487,7 +493,6 @@ html {
   .intro {
     position: absolute;
     width: 100%;
-    max-width: 100%;
     height: 100%;
     margin: 0;
     padding: 0 24px;
@@ -591,6 +596,14 @@ html {
     transform: translateY(-50%);
     padding: 20px;
     flex-direction: column;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+  }
+
+  .intro-button-container.show {
+    opacity: 1;
+    visibility: visible;
   }
 
   .vertical-button {
@@ -605,15 +618,14 @@ html {
     cursor: pointer;
     position: relative;
     /* 相对定位 */
-    transition: transform 0.3s;
+    transition: color 0.1s ease-in-out, transform 0.2s;
   }
 
   .vertical-button-first {
     border: 1px solid white;
     position: relative;
-    /* 相对定位 */
     padding-top: 30px;
-    /* 为了容纳倒三角形 */
+    transition: color 0.1s ease-in-out, background-color 0.2s ease-in-out;
   }
 
   .vertical-button-first::before {
@@ -627,12 +639,16 @@ html {
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     border-top: 10px solid white;
+    transition: border-top-color 0.1s ease-in-out;
   }
 
   .vertical-button-first:hover {
-    color: black;
+    color: #A2483D;
     background-color: white;
-    transform: scale(1.1);
+  }
+
+  .vertical-button-first:hover::before {
+    border-top: 10px solid #A2483D;
   }
 
   .vertical-button::after {
@@ -646,79 +662,126 @@ html {
     transition: height 0.3s;
     transform: translateX(-50%);
   }
-  
+
+  .vertical-button:not(.vertical-button-first):hover {
+    color: #A2483D;
+  }
+
   .vertical-button:not(.vertical-button-first):hover::after {
     height: 30px;
+    background: #A2483D;
+  }
+}
+
+/* Intro Char Desc */
+@media (min-width: 1024px) {
+  .intro-chardesc-container {
+    position: absolute;
+    top: 50%;
+    left: calc(50% + 150px);
+    transform: translate(-50%, -50%);
+    width: 400px;
+    padding: 20px;
+    border-radius: 10px;
+    color: white;
+    font-family: 'MyCN_K';
+    text-align: left;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+  }
+  
+  .intro-chardesc-container.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .intro-chardesc-title {
+    font-size: 24px;
+    color: #A2483D;
+    margin-bottom: 10px;
+    font-weight: bold;
+  }
+
+  .intro-chardesc-subtitle {
+    font-size: 18px;
+    color: #bbb;
+    margin-bottom: 20px;
+    font-family: 'MyEN_AG';
+  }
+
+  .intro-chardesc-caption {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  .intro-chardesc-description {
+    font-size: 12px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  .intro-chardesc-button {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: white;
+    color: #A2483D;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+  }
+
+  .intro-chardesc-button:hover {
+    background-color: #A2483D;
+    color: white;
+    transform: scale(1.05);
   }
 }
 
 /* Intro Date */
 @media (min-width: 1024px) {
-  .intro__date {
-    font-family: 'MyEN_DIN';
-    font-size: 22px;
-    font-weight: bolder;
-
+  .corner-date-box {
     position: absolute;
-    top: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'MyEN_AG';
+    font-size: 24px;
+    color: white;
+    transform: rotate(-30deg);
   }
 
-  .intro__date--small-screen {
-    display: none;
-    visibility: hidden
-  }
-
-  .intro__date--large-screen {
-    display: block;
-    visibility: visible
-  }
-
-  .intro--init .intro__date {
-    opacity: 0
-  }
-
-  .intro--exit .intro__date {
-    opacity: 0;
-  }
-
-  .intro__text-container--right .intro__date {
-    left: 0;
-    color: #fff;
-    transform: translate3d(16px, -18px, 0) rotate(-45deg)
-  }
-
-  .intro__text-container--left .intro__date {
-    right: 0;
-    transform: translate3d(-14px, 0, 0) rotate(-45deg)
-  }
-
-  .intro__date:after,
-  .intro__date:before {
+  .corner-date-box::after {
     content: '';
     display: inline-block;
-    position: absolute
+    width: 80px;
+    height: 4px;
+    background-color: #A2483D;
+  }
+  
+  .left-corner {
+    bottom: 10%;
+    left: 10%;
   }
 
-  .intro__date:before {
-    width: 20px
+  .corner-date-box.left-corner::after {
+    margin-left: -60px;
+    margin-bottom: -30px;
   }
-
-
-  .intro__date:after {
-    width: calc(75px)
+  
+  .right-corner {
+    top: 10%;
+    right: 10%;
   }
-
-  .intro__text-container--right .intro__date:after {
-    bottom: -14px;
-    left: -11px;
-    border-top: 4px solid #a2483d;
+  
+  .corner-date-box.right-corner::after {
+    margin-left: -60px;
+    margin-bottom: 32px;
   }
+  
 
-  .intro__text-container--left .intro__date:after {
-    top: -14px;
-    right: -11px;
-    border-top: 4px solid #a2483d;
-  }
 }
 
 /* Story Page Related */
