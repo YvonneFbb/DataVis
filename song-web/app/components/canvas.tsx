@@ -217,16 +217,19 @@ const CameraController = () => {
           overallStatus.current.isFinalSelected = true;
           overallStatus.current.selectedGID = spriteCharGroups[overallStatus.current.selectedID];
 
+          // 设置介绍文字
+          const introRef = overallStatus.current.introRef.current!;
+          const charDesc = charDescGroups[(overallStatus.current.selectedGID)];
+          (introRef.querySelector('.intro-chardesc-title') as HTMLElement).innerText = charDesc.title;
+          (introRef.querySelector('.intro-chardesc-subtitle') as HTMLElement).innerText = 'AD ' + charDesc.year;
+          (introRef.querySelector('.intro-chardesc-caption') as HTMLElement).innerText = charDesc.caption;
+          (introRef.querySelector('.intro-chardesc-description') as HTMLElement).innerText = charDesc.desc;
           setTimeout(() => {
-            const introRef = overallStatus.current.introRef.current!;
             const buttonBox = introRef.querySelector('.intro-button-container') as HTMLElement;
-
             buttonBox.classList.remove('show');
           }, 1000 * 1);
           setTimeout(() => {
-            const introRef = overallStatus.current.introRef.current!;
             const charBox = introRef.querySelector('.intro-chardesc-container') as HTMLElement;
-
             charBox.classList.add('show');
           }, 1000 * 2.5);
         }
@@ -403,21 +406,29 @@ const spriteCharGroups: number[] = [
   4 + 6, 4 + 6, 5 + 6, 5 + 6, 4 + 6, 5 + 6, 5 + 6, 4 + 6, 5 + 6, 4 + 6, 4 + 6, 4 + 6, 5 + 6, 5 + 6, 5 + 6, 4 + 6,
 ];
 
-const spriteGroupChars: number[][] = [
-  // Group 0 and 1
-  [0, 1, 3, 5, 8, 10, 11, 13], [2, 4, 6, 7, 9, 12, 14, 15],
-  // Group 2 and 3
-  [16, 17, 18, 22, 24, 25, 27, 31], [19, 20, 21, 23, 26, 28, 29, 30],
-  // Group 4 and 5
-  [32, 33, 36, 39, 41, 42, 43, 47], [34, 35, 37, 38, 40, 44, 45, 46],
+type CharDesc = {
+  title: string;
+  caption: string;
+  year: number;
+  desc: string;
+  page: number;
+}
 
-  // Group 6 and 7 (Dup 0 and 1)
-  [0 + 48, 1 + 48, 3 + 48, 5 + 48, 8 + 48, 10 + 48, 11 + 48, 13 + 48], [2 + 48, 4 + 48, 6 + 48, 7 + 48, 9 + 48, 12 + 48, 14 + 48, 15 + 48],
-  // Group 8 and 9 (Dup 2 and 3)
-  [16 + 48, 17 + 48, 18 + 48, 22 + 48, 24 + 48, 25 + 48, 27 + 48, 31 + 48], [19 + 48, 20 + 48, 21 + 48, 23 + 48, 26 + 48, 28 + 48, 29 + 48, 30 + 48],
-  // Group 10 and 11 (Dup 4 and 5)
-  [32 + 48, 33 + 48, 36 + 48, 39 + 48, 41 + 48, 42 + 48, 43 + 48, 47 + 48], [34 + 48, 35 + 48, 37 + 48, 38 + 48, 40 + 48, 44 + 48, 45 + 48, 46 + 48],
-];
+export const charDescGroups: CharDesc[] = [
+  { title: "《窦氏联珠集》", year: 1178, page: 7, caption: "略带褚遂良笔意", desc: "淳熙五年蕲州刻本《窦氏联珠集》略带褚遂良笔意，在宋代版刻楷书中别具一格。" },
+  { title: "《昆山杂咏》", year: 1207, page: 8, caption: "近于行楷的字体", desc: "宋开禧三年昆山县斋刻本《昆山杂咏》以行楷笔意写稿，多有连笔及简写处。提按顿挫，笔意毕现。结字流美而富有新意，绝非俗手所书。" },
+  { title: "《新定三礼图》", year: 1175, page: 7, caption: "欧颜型", desc: "到了南宋中期，近欧型依然盛行，其他三种类型则较为少见。欧颜型仅见于宋淳熙二年镇江府学刻公文纸印本《新定三礼图》一书，惜笔画细瘦，俊美有余，古意不足。" },
+  { title: "《事类赋》", year: 1146, page: 6, caption: "近欧型", desc: "绍兴十六年两浙东路茶盐司刻本《事类赋》，半页八行，行十六至二十字不等。小字双行，行二十五至二十七字不等。白口，左右双边。书字体取法欧阳，字口清晰。" },
+  { title: "《渭南文集》", year: 1220, page: 8, caption: "程式化", desc: "原本鲜活的欧字，逐步向程式化方向发展。这类风格占据了现存南宋中期浙本书籍的大多数，如：宋嘉定十三年陆子遹溧阳学宫刻本《渭南文集》。" },
+  { title: "《窦氏联珠集》", year: 1178, page: 7, caption: "略带褚遂良笔意", desc: "淳熙五年蕲州刻本《窦氏联珠集》略带褚遂良笔意，在宋代版刻楷书中别具一格。" },
+  // Dup
+  { title: "《窦氏联珠集》", year: 1178, page: 7, caption: "略带褚遂良笔意", desc: "淳熙五年蕲州刻本《窦氏联珠集》略带褚遂良笔意，在宋代版刻楷书中别具一格。" },
+  { title: "《昆山杂咏》", year: 1207, page: 8, caption: "近于行楷的字体", desc: "宋开禧三年昆山县斋刻本《昆山杂咏》以行楷笔意写稿，多有连笔及简写处。提按顿挫，笔意毕现。结字流美而富有新意，绝非俗手所书。" },
+  { title: "《新定三礼图》", year: 1175, page: 7, caption: "欧颜型", desc: "到了南宋中期，近欧型依然盛行，其他三种类型则较为少见。欧颜型仅见于宋淳熙二年镇江府学刻公文纸印本《新定三礼图》一书，惜笔画细瘦，俊美有余，古意不足。" },
+  { title: "《事类赋》", year: 1146, page: 6, caption: "近欧型", desc: "绍兴十六年两浙东路茶盐司刻本《事类赋》，半页八行，行十六至二十字不等。小字双行，行二十五至二十七字不等。白口，左右双边。书字体取法欧阳，字口清晰。" },
+  { title: "《渭南文集》", year: 1220, page: 8, caption: "程式化", desc: "原本鲜活的欧字，逐步向程式化方向发展。这类风格占据了现存南宋中期浙本书籍的大多数，如：宋嘉定十三年陆子遹溧阳学宫刻本《渭南文集》。" },
+  { title: "《窦氏联珠集》", year: 1178, page: 7, caption: "略带褚遂良笔意", desc: "淳熙五年蕲州刻本《窦氏联珠集》略带褚遂良笔意，在宋代版刻楷书中别具一格。" },
+]
 
 
 const Cube = () => {
