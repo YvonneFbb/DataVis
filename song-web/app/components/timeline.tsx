@@ -525,7 +525,7 @@ export function Timeline({ events, span, desc, current }: TimelineProps) {
   return (
     <>
       <div ref={eventZoomRef} className="event-zoom" style={{ 'opacity': 0, 'visibility': 'hidden' }} onClick={updateZoomImg}>
-        <Image className="event-zoom-img" src="/test.jpg" alt="zooming" />
+        <img className="event-zoom-img" src="/test.jpg" alt="zooming" />
       </div>
       {/* <div ref={overviewBoxRef} className="overview-box" style={{ 'opacity': 1 }}>
       </div> */}
@@ -547,10 +547,10 @@ export function Timeline({ events, span, desc, current }: TimelineProps) {
         <p className="event-content">
           测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字测试文字
         </p>
-        <Image className="event-img" src="/test.jpg" alt="" onClick={updateZoomImg} />
+        <img className="event-img" src="/test.jpg" alt="" onClick={updateZoomImg} />
       </div>
       <div ref={eventBgRef} className="event-bg" style={{ 'opacity': 0 }}>
-        <Image className="event-bg-img" src="/test.jpg" alt="" />
+        <img className="event-bg-img" src="/test.jpg" alt="" />
       </div>
       <svg ref={svgRef} width={windowWidth} height={windowHeight}>
         <g ref={focusRef} className='focus' />

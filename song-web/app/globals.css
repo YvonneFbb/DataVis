@@ -5,17 +5,17 @@
 /* Our Theme Color: #AFAFAF */
 @font-face {
   font-family: 'MyCN_K';
-  src: url(/fonts/方正宋刻本秀楷简.ttf);
+  src: url(/fonts/cn_K.ttf);
 }
 
 @font-face {
   font-family: 'MyCN_F_12B';
-  src: url(/fonts/方正悠黑_512B.ttf);
+  src: url(/fonts/cn_FZ_512B.ttf);
 }
 
 @font-face {
   font-family: 'MyCN_F_08R';
-  src: url(/fonts/方正悠黑_508R.ttf);
+  src: url(/fonts/cn_FZ_508R.ttf);
 }
 
 @font-face {
