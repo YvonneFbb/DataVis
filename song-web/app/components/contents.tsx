@@ -189,6 +189,8 @@ const Intro = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
   );
 });
 
+Intro.displayName = "Intro";
+
 const Story = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
   const overallStatus = useContext(OverallContext);
 
@@ -274,3 +276,5 @@ const Story = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
     </div>
   )
 });
+
+Story.displayName = "Story";
