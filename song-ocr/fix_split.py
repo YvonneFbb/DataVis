@@ -168,7 +168,7 @@ def DOIT(rawPic, outdir, vSmoothWindow=5, hSmoothWindow=5, vThreshIter=2, hThrea
     plt.figure(figsize=(10, len(V_start) * 4))  # Create a figure for all horizontal projections
     for i in range(len(V_start)):
         # Skip segments that are too narrow (likely incorrect cuts)
-        if V_end[i] - V_start[i] < 30:  # Threshold can be adjusted
+        if V_end[i] - V_start[i] < 25:  # Threshold can be adjusted
             continue
 
         rectMin = (V_start[i], 0)
@@ -185,6 +185,9 @@ def DOIT(rawPic, outdir, vSmoothWindow=5, hSmoothWindow=5, vThreshIter=2, hThrea
         H_start, H_end = dripDropMethod(H, hThreashVal)
         # Draw rectangles on the original image for horizontal segmentation and save cropped characters
         for j in range(len(H_start)):
+            if H_end[j] - H_start[j] < 15:
+                continue
+            
             rectMinH = (V_start[i], H_start[j])
             rectMaxH = (V_end[i], H_end[j])
             cv2.rectangle(origineImage, rectMinH, rectMaxH, (0, 255, 0), 2)
