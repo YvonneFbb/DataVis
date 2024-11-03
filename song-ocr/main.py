@@ -1,5 +1,11 @@
+
+import click
 from fix_split import DOIT
 
-# Test image path
-rawPicPath = "./test.png"
-DOIT(rawPicPath, outdir='./output')
+@click.command()
+@click.argument('filename')
+def main(filename):
+    DOIT(filename, outdir=f"{filename}_output")
+
+if __name__ == '__main__':
+    main()
