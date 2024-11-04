@@ -1,4 +1,7 @@
-test*.png
-*_output/*
+bin/*
+include/*
+lib/*
+share/*
+works/*
 
-__pycache__
+pyvenv.cfg

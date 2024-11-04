@@ -103,11 +103,11 @@ def DOIT(
     if len(V_start) > len(V_end):
         V_end.append(w - 5)
 
-    # Remove segments with width less than 20
+    # Remove segments with width less than xx
     filtered_V_start = []
     filtered_V_end = []
     for i in range(len(V_start)):
-        if V_end[i] - V_start[i] >= 5:
+        if V_end[i] - V_start[i] >= 10:
             filtered_V_start.append(V_start[i])
             filtered_V_end.append(V_end[i])
     V_start, V_end = filtered_V_start, filtered_V_end
@@ -150,7 +150,7 @@ def DOIT(
     while i < len(V_start):
         # Skip segments that are too narrow (likely incorrect cuts)
         segment_width = V_end[i] - V_start[i]
-        if segment_width < median_length * 0.8:
+        if segment_width < median_length * 0.75:
             i += 1
             continue
 
@@ -186,18 +186,12 @@ def DOIT(
         # Apply drip-drop method for horizontal segmentation
         H_start, H_end = dripDropMethod(H, hThreshVal)
 
-        # print(f"col: {i}, len(H_start): {len(H_start)}")
-
         j = 0
         while j < len(H_start):
             segment_height = H_end[j] - H_start[j]
             tmpThresh = hThreshVal
-            # print(f"Debug: segment height [{H_start[j]}, {H_end[j]}]")
             while segment_height > median_length * 1.5:
                 tmpThresh += 0.1
-                # print(
-                #     f"Debug: resplit height, current height: {segment_height} [{H_start[j]}, {H_end[j]}], threshold: {tmpThresh}"
-                # )
                 if tmpThresh >= maxHThreshVal:
                     break
                 sub_H_start, sub_H_end = dripDropMethod(
@@ -216,14 +210,6 @@ def DOIT(
                 segment_height = H_end[j] - H_start[j]
 
             j += 1
-
-        # Remove segments with height less than xx at the beginning and end before merging
-        if len(H_start) > 0 and (H_end[0] - H_start[0]) < 20:
-            H_start.pop(0)
-            H_end.pop(0)
-        if len(H_start) > 0 and (H_end[-1] - H_start[-1]) < 20:
-            H_start.pop(-1)
-            H_end.pop(-1)
         
         # Merge segments that are very close to each other
         merged_H_start = [H_start[0]] if H_start else []
