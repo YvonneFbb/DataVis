@@ -85,12 +85,12 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
             randomPosition.current.z = Math.random() * 2 - 1;
           }
 
-          // targetPosition.current.x = randomPosition.current!.x * 2;
-          // targetPosition.current.y = randomPosition.current!.y * 2;
-          // targetPosition.current.z = randomPosition.current!.z * 2;
-          targetPosition.current.x = radius * Math.cos(angle.current) * 3;
-          targetPosition.current.y = radius * Math.sin(angle.current) * 3;
-          targetPosition.current.z = (initialPosition[2]) * 3;
+          targetPosition.current.x = randomPosition.current!.x * 2;
+          targetPosition.current.y = randomPosition.current!.y * 2;
+          targetPosition.current.z = randomPosition.current!.z * 2;
+          // targetPosition.current.x = radius * Math.cos(angle.current) * 3;
+          // targetPosition.current.y = radius * Math.sin(angle.current) * 3;
+          // targetPosition.current.z = (initialPosition[2]) * 3;
           spriteRef.current.position.lerp(targetPosition.current, 0.1);
 
           // 选择操作
@@ -114,9 +114,9 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
 
           if (overallStatus.current.selectedGID != GroupID) {
             // 不相关笔画
-            finalSpeed.current += (2 - finalSpeed.current) * 0.02;
-            finalScale.current += (5 - finalScale.current) * 0.02;
-            finalSize.current += (0 - finalSize.current) * 0.04;
+            finalSpeed.current += (2 - finalSpeed.current) * 0.04;
+            finalScale.current += (5 - finalScale.current) * 0.04;
+            finalSize.current += (0 - finalSize.current) * 0.06;
 
             // angle.current += 1 / 60 * finalSpeed.current;
 
@@ -504,7 +504,7 @@ function loadInitChars(maxDimension: number, edge: number): JSX.Element[] {
   // 遍历 spriteInitLocations
   let key = 0;
   sprites.push(
-    <Sprite key={key} initialPosition={[0, -0.22, -0.22, 0.95, 0]} finalPosition={[0, 0, 0]} imagePath={"/intro/0.jpg"} opacity={1}
+    <Sprite key={key} initialPosition={[1, -0.22, -0.22, 0.95, 0]} finalPosition={[0, 0, 0]} imagePath={"/intro/0.jpg"} opacity={1}
       charID={key} GroupID={-1} />
   )
 
