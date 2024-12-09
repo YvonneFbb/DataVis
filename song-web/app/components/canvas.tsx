@@ -22,6 +22,7 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
   const spriteRef = useRef<ThreeSprite>(null);
 
   const targetPosition = useRef(new Vector3(0, 0, 0));
+  const randomPosition = useRef<Vector3 | null>(null);
   const radius = (initialPosition[0] ** 2 + initialPosition[1] ** 2) ** 0.5;
   const angle = useRef(Math.atan2(initialPosition[1], initialPosition[0]));
 
@@ -35,56 +36,114 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
   useFrame(({ camera }) => {
     if (spriteRef.current && !finalEnd.current) {
       spriteRef.current.lookAt(camera.position);
-      if (!overallStatus.current.isFinalSelected) {
-        angle.current += 1 / 60 * overallStatus.current.rotationSpeed;
+      switch (overallStatus.current.selectLevel) {
+        case 0: {
+          // Inital State
+          // overallStatus.current.rotationSpeed = 0;
+          // overallStatus.current.cubeScale = 1;
 
-        // 更新位置
-        targetPosition.current.x = radius * Math.cos(angle.current) * overallStatus.current.cubeScale;
-        targetPosition.current.y = radius * Math.sin(angle.current) * overallStatus.current.cubeScale;
-        targetPosition.current.z = (initialPosition[2]) * overallStatus.current.cubeScale;
-        spriteRef.current.position.lerp(targetPosition.current, 0.1);
+          // angle.current += 1 / 60 * overallStatus.current.rotationSpeed;
 
-        // 选择操作
-        if (overallStatus.current.selectedID == charID) {
-          spriteRef.current.scale.lerp(new Vector3(texture.image.width / 200, texture.image.height / 200, 1), 0.03);
-          spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.1;
-        } else {
+          // 更新位置
+          // targetPosition.current.x = radius * Math.cos(angle.current) * overallStatus.current.cubeScale;
+          // targetPosition.current.y = radius * Math.sin(angle.current) * overallStatus.current.cubeScale;
+          // targetPosition.current.z = (initialPosition[2]) * overallStatus.current.cubeScale;
+          if (randomPosition.current != null) {
+            randomPosition.current = null;
+          }
+
+          targetPosition.current.x = radius * Math.cos(angle.current);
+          targetPosition.current.y = radius * Math.sin(angle.current);
+          targetPosition.current.z = (initialPosition[2]);
+
+          spriteRef.current.position.lerp(targetPosition.current, 0.1);
           spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220 * initialPosition[3], texture.image.height / 220 * initialPosition[3], 1), 0.5);
           spriteRef.current.material.rotation += (initialPosition[4] / 180 * Math.PI - spriteRef.current.material.rotation) * 0.5;
           spriteRef.current.material.opacity += (opacity - spriteRef.current.material.opacity) * 0.5;
-        }
 
-        // 应用新的位置
-      } else {
-        if (!reachFinal.current) {
-          reachFinal.current = true;
-          setTimeout(() => {
-            finalEnd.current = true;
-          }, 1000 * 15);
-        }
-        if (overallStatus.current.selectedGID != GroupID) {
-          // 不相关笔画
-          finalSpeed.current += (2 - finalSpeed.current) * 0.02;
-          finalScale.current += (5 - finalScale.current) * 0.02;
-          finalSize.current += (0 - finalSize.current) * 0.04;
+        } break;
+        case 1: {
+          // Enter Select State
+          // overallStatus.current.rotationSpeed = 0;
+          // overallStatus.current.cubeScale = 2;
 
-          angle.current += 1 / 60 * finalSpeed.current;
-
+          // angle.current += 1 / 60 * overallStatus.current.rotationSpeed;
           // 更新位置
-          targetPosition.current.x = radius * Math.cos(angle.current) * finalScale.current;
-          targetPosition.current.y = radius * Math.sin(angle.current) * finalScale.current;
-          targetPosition.current.z = (initialPosition[2]) * finalScale.current;
+          // targetPosition.current.x = radius * Math.cos(angle.current) * overallStatus.current.cubeScale;
+          // targetPosition.current.y = radius * Math.sin(angle.current) * overallStatus.current.cubeScale;
+          // targetPosition.current.z = (initialPosition[2]) * overallStatus.current.cubeScale;
 
-          spriteRef.current.scale.lerp(new Vector3(finalSize.current, finalSize.current, finalSize.current), 0.05);
-          spriteRef.current.position.lerp(targetPosition.current, 0.05);
-        } else {
-          // 留存笔画
-          spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220, texture.image.height / 220, 1), 0.05);
-          spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.01;
-          spriteRef.current.material.rotation += (0 - spriteRef.current.material.rotation) * 0.01;
-          spriteRef.current.position.lerp(new Vector3(finalPosition[0], finalPosition[1], finalPosition[2]), 0.01);
-        }
+          if (charID == 0) {
+            spriteRef.current.material.opacity += (0 - spriteRef.current.material.opacity) * 0.3;
+            break;
+          }
+
+          if (randomPosition.current == null) {
+            randomPosition.current = new Vector3();
+            randomPosition.current.x = Math.random() * 2 - 1;
+            randomPosition.current.y = Math.random() * 2 - 1;
+            randomPosition.current.z = Math.random() * 2 - 1;
+          }
+
+          // targetPosition.current.x = randomPosition.current!.x * 2;
+          // targetPosition.current.y = randomPosition.current!.y * 2;
+          // targetPosition.current.z = randomPosition.current!.z * 2;
+          targetPosition.current.x = radius * Math.cos(angle.current) * 3;
+          targetPosition.current.y = radius * Math.sin(angle.current) * 3;
+          targetPosition.current.z = (initialPosition[2]) * 3;
+          spriteRef.current.position.lerp(targetPosition.current, 0.1);
+
+          // 选择操作
+          if (overallStatus.current.selectedID == charID) {
+            console.log('Selected: ', charID, spriteInitLocations[charID - 1]);
+            spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220, texture.image.height / 220, 1), 0.03);
+            spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.1;
+          } else {
+            spriteRef.current.scale.lerp(new Vector3(texture.image.width / 160 * initialPosition[3], texture.image.height / 160 * initialPosition[3], 1), 0.5);
+            spriteRef.current.material.rotation += (initialPosition[4] / 180 * Math.PI - spriteRef.current.material.rotation) * 0.5;
+            spriteRef.current.material.opacity += (opacity - spriteRef.current.material.opacity) * 0.5;
+          }
+        } break;
+        case 2: {
+          if (!reachFinal.current) {
+            reachFinal.current = true;
+            setTimeout(() => {
+              finalEnd.current = true;
+            }, 1000 * 15);
+          }
+
+          if (overallStatus.current.selectedGID != GroupID) {
+            // 不相关笔画
+            finalSpeed.current += (2 - finalSpeed.current) * 0.02;
+            finalScale.current += (5 - finalScale.current) * 0.02;
+            finalSize.current += (0 - finalSize.current) * 0.04;
+
+            // angle.current += 1 / 60 * finalSpeed.current;
+
+            if (randomPosition.current == null) {
+              randomPosition.current = new Vector3();
+              randomPosition.current.x = Math.random() * 2 - 1;
+              randomPosition.current.y = Math.random() * 2 - 1;
+              randomPosition.current.z = Math.random() * 2 - 1;
+            }
+
+            // 更新位置
+            targetPosition.current.x = randomPosition.current!.x * finalScale.current;
+            targetPosition.current.y = randomPosition.current!.y * finalScale.current;
+            targetPosition.current.z = randomPosition.current!.z * finalScale.current;
+
+            spriteRef.current.scale.lerp(new Vector3(finalSize.current, finalSize.current, finalSize.current), 0.05);
+            spriteRef.current.position.lerp(targetPosition.current, 0.05);
+          } else {
+            // 留存笔画
+            spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220, texture.image.height / 220, 1), 0.05);
+            spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.01;
+            spriteRef.current.material.rotation += (0 - spriteRef.current.material.rotation) * 0.01;
+            spriteRef.current.position.lerp(new Vector3(finalPosition[0], finalPosition[1], finalPosition[2]), 0.01);
+          }
+        } break;
       }
+
     }
   });
 
@@ -105,14 +164,6 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
 const SpriteController = () => {
   const overallStatus = useContext(OverallContext);
   const initCubeEdge = overallStatus.current.initCubeSize;
-
-  // const sprites = [];
-  // sprites.push(...loadOneFace(CubeFace.Front, initCubeSide, 0, 0));
-  // sprites.push(...loadOneFace(CubeFace.Left, initCubeSide, 1, 16));
-  // sprites.push(...loadOneFace(CubeFace.Top, initCubeSide, 2, 32));
-  // sprites.push(...loadOneFace(CubeFace.Back, initCubeSide, 0, 48));
-  // sprites.push(...loadOneFace(CubeFace.Right, initCubeSide, 1, 64));
-  // sprites.push(...loadOneFace(CubeFace.Bottom, initCubeSide, 2, 80));
 
   return loadInitChars(50, initCubeEdge);
 }
@@ -152,7 +203,7 @@ const CameraController = () => {
       mouse.current.y = -(event.clientY / innerHeight) * 2 + 1;
 
       // 选择判断
-      if (!overallStatus.current.isFinalSelected) {
+      if (overallStatus.current.selectLevel != 2) {
         raycaster.setFromCamera(mouse.current, camera);
         const intersects = raycaster.intersectObjects(scene.children);
         const intersect = getActualIntersect(intersects);
@@ -172,12 +223,9 @@ const CameraController = () => {
 
           } else {
             // 进入选择状态
-            // overallStatus.current.rotationSpeed = 2;
-            overallStatus.current.rotationSpeed = 0.00;
-            overallStatus.current.cubeScale = 2;
             overallStatus.current.selectedID = obj.userData["charID"];
             overallStatus.current.selectedGID = obj.userData["groupID"];
-
+            overallStatus.current.selectLevel = 1;
 
             lastSelected.current = obj;
 
@@ -187,12 +235,9 @@ const CameraController = () => {
         } else {
           if (lastSelected.current) {
             // 退出选择
-            // overallStatus.current.rotationSpeed = 0.1;
-            overallStatus.current.rotationSpeed = 0.0;
-
             exitSelectTimeout.current = setTimeout(() => {
               if (!lastSelected.current) {
-                overallStatus.current.cubeScale = 1;
+                overallStatus.current.selectLevel = 0;
               }
             }, 2000);
 
@@ -215,11 +260,11 @@ const CameraController = () => {
 
   // 更新选择进度
   useFrame(() => {
-    if (!overallStatus.current.isFinalSelected) {
+    if (overallStatus.current.selectLevel != 2) {
       if (overallStatus.current.selectedID != -1) {
         setSelectProgress(selectProgress >= 100 ? 100 : selectProgress + 1);
         if (selectProgress >= 100) {
-          overallStatus.current.isFinalSelected = true;
+          overallStatus.current.selectLevel = 2;
 
           // 设置介绍文字
           const introRef = overallStatus.current.introRef.current!;
@@ -247,7 +292,7 @@ const CameraController = () => {
   const viewOffsetX = useRef(0);
   useFrame(() => {
     if (!finalEnd.current) {
-      if (!overallStatus.current.isFinalSelected) {
+      if (overallStatus.current.selectLevel != 2) {
         // 根据鼠标纵向位置调整摄像机的俯仰角
         phi.current = (mouse.current.y * 0.25 + 0.5) * Math.PI; // 从 0.25π 到 0.75π，即从稍微向下到稍微向上
 
@@ -285,78 +330,78 @@ const CameraController = () => {
   return null;
 };
 
-// [Books, ID, locations, scale, angle]
+// [Books, ID, X2D, Y2D, scale, angle]
 const spriteInitLocations: [number, number, number, number, number, number][] = [
-  [1, 1, 30.510, 13.864, 4.238 / 7.306, 9.544],
-  [1, 2, 25.735, 26.474, 13.533 / 30.207, 356.104],
+  [1, 1, 30.510, 13.864, 3.996 / 7.306, 9.544],
+  [1, 2, 25.735, 26.474, 13.521 / 30.207, 356.104],
   [1, 2, 24.150, 27.390, 8.465 / 30.207, 0],
   [1, 2, 23.900, 27.390, 8.465 / 30.207, 0],
   [1, 2, 23.511, 26.950, 8.465 / 30.207, 0],
-  [1, 2, 30.095, 37.143, 2.253 / 30.207, 80.599],
-  [1, 2, 35.304, 16.480, 12.691 / 30.207, 357.182],
-  [1, 2, 25.839, 17.190, 12.681 / 30.207, 354.908],
-  [1, 3, 30.579, 35.909, 1.95 / 8.554, 314.78],
-  [1, 4, 19.877, 16.958, 3.116 / 13.872, 0],
-  [1, 5, 27.486, 30.740, 6.158 / 21.113, 0.738],
-  [1, 6, 18.176, 18.897, 3.981 / 12.989, 22.509],
-  [1, 7, 37.489, 25.882, 6.473 / 23.836, 220.512],
+  [1, 2, 30.095, 37.143, 16.019 / 30.207, 80.599],
+  [1, 2, 35.304, 16.480, 12.677 / 30.207, 357.182],
+  [1, 2, 25.839, 17.190, 12.677 / 30.207, 354.908],
+  [1, 3, 30.579, 35.909, 1.95 / 8.554, 0],
+  [1, 4, 19.877, 16.958, 4.043 / 13.872, 314.78],
+  [1, 5, 27.486, 30.740, 6.214 / 21.113, 0.738],
+  [1, 6, 18.176, 18.897, 5.489 / 12.989, 22.509],
+  [1, 7, 37.489, 25.882, 6.169 / 23.836, 220.512],
 
-  [2, 1, 17.722, 20.207, 4.964 / 11.994, 38.151],
-  [2, 1, 30.759, 36.749, 2.127 / 11.994, 71.8],
-  [2, 2, 17.322, 22.590, 5.320 / 13.863, 35.22],
+  [2, 1, 17.722, 20.207, 6.683 / 11.994, 38.151],
+  [2, 1, 30.759, 36.749, 7.553 / 11.994, 71.8],
+  [2, 2, 17.322, 22.590, 6.931 / 13.863, 35.22],
   [2, 3, 30.310, 24.019, 2.135 / 7.710, 0],
-  [2, 4, 16.630, 22.227, 3.937 / 12.479, 211.681],
-  [2, 5, 16.374, 39.487, 4.175 / 16.585, 324.689],
+  [2, 4, 16.630, 22.227, 5.190 / 12.479, 211.681],
+  [2, 5, 16.374, 39.487, 2.936 / 16.585, 324.689],
   [2, 6, 29.318, 26.305, 4.078 / 13.132, 0],
-  [2, 7, 21.769, 37.048, 4.766 / 21.617, 251.8],
+  [2, 7, 21.769, 37.048, 5.101 / 21.617, 251.8],
 
-  [3, 1, 41.302, 15.747, 4.541 / 10.853, 176.104],
-  [3, 2, 37.489, 25.268, 6.130 / 12.265, 176.104],
-  [3, 2, 34.413, 25.712, 6.161 / 12.265, 171.743],
+  [3, 1, 41.302, 15.747, 4.503 / 10.853, 176.104],
+  [3, 2, 37.489, 25.268, 6.076 / 12.265, 176.104],
+  [3, 2, 34.413, 25.712, 6.076 / 12.265, 171.743],
   [3, 3, 29.633, 40.015, 4.293 / 7.489, 0],
-  [3, 4, 18.574, 38.604, 7.071 / 11.853, 14.075],
-  [3, 5, 11.253, 41.250, 5.009 / 13.290, 333.502],
-  [3, 5, 15.645, 39.329, 8.079 / 13.290, 341.025],
-  [3, 6, 41.459, 18.143, 2.731 / 10.983, 213.346],
-  [3, 7, 42.364, 17.807, 3.415 / 20.726, 333.567],
+  [3, 4, 18.574, 38.604, 7.441 / 11.853, 14.075],
+  [3, 5, 11.253, 41.250, 3.861 / 13.290, 333.502],
+  [3, 5, 15.645, 39.329, 6.810 / 13.290, 341.025],
+  [3, 6, 41.459, 18.143, 4.809 / 10.983, 213.346],
+  [3, 7, 42.364, 17.807, 4.885 / 20.726, 333.567],
 
-  [4, 1, 31.096, 12.435, 3.313 / 7.724, 13.19],
-  [4, 1, 27.794, 44.876, 2.463 / 7.724, 354.392],
-  [4, 2, 30.579, 24.872, 2.924 / 10.462, 68.447],
-  [4, 2, 30.255, 23.818, 2.965 / 10.462, 255.745],
-  [4, 2, 30.538, 31.077, 2.512 / 10.462, 73.979],
-  [4, 2, 33.618, 31.146, 4.324 / 10.462, 294.819],
-  [4, 2, 28.578, 46.157, 2.195 / 10.462, 283.819],
-  [4, 3, 35.829, 32.692, 5.659 / 8.907, 47.959],
-  [4, 4, 30.374, 26.516, 2.703 / 14.092, 68.045],
-  [4, 5, 26.233, 31.077, 8.153 / 15.616, 352.394],
-  [4, 6, 40.026, 25.712, 2.083 / 13.156, 352.967],
+  [4, 1, 31.096, 12.435, 3.213 / 7.724, 13.19],
+  [4, 1, 27.794, 44.876, 2.522 / 7.724, 354.392],
+  [4, 2, 30.579, 24.872, 9.111 / 10.462, 68.447],
+  [4, 2, 30.255, 23.818, 8.479 / 10.462, 255.745],
+  [4, 2, 30.538, 31.077, 7.635 / 10.462, 73.979],
+  [4, 2, 33.618, 31.146, 6.100 / 10.462, 293.744],
+  [4, 2, 28.578, 46.157, 3.475 / 10.462, 283.819],
+  [4, 3, 35.829, 32.692, 2.175 / 8.907, 47.959],
+  [4, 4, 30.374, 26.516, 9.754 / 14.092, 68.045],
+  [4, 5, 26.233, 31.077, 7.225 / 15.616, 352.394],
+  [4, 6, 40.026, 25.712, 1.929 / 13.156, 352.967],
   [4, 7, 41.765, 36.515, 16.74 / 23.769, 0],
 
   [5, 1, 30.884, 11.328, 2.617 / 6.923, 0],
-  [5, 1, 18.806, 26.422, 0.69 / 6.923, 239.93],
-  [5, 2, 37.477, 25.475, 7.443 / 14.288, 350.205],
+  [5, 1, 18.806, 26.422, 0.675 / 6.923, 239.93],
+  [5, 2, 37.477, 25.475, 7.317 / 14.288, 350.205],
   [5, 3, 29.738, 39.487, 4.082 / 7.268, 0],
-  [5, 4, 16.630, 23.840, 4.041 / 12.926, 17.318],
-  [5, 5, 25.895, 31.867, 11.3 / 15.968, 356.104],
-  [5, 5, 25.632, 30.740, 11.3 / 15.968, 356.104],
-  [5, 6, 42.982, 16.679, 2.179 / 10.904, 23.243],
-  [5, 7, 32.311, 29.923, 7.405 / 24.955, 178.679],
+  [5, 4, 16.630, 23.840, 4.627 / 12.926, 17.318],
+  [5, 5, 25.895, 31.867, 10.633 / 15.968, 356.104],
+  [5, 5, 25.632, 30.740, 10.633 / 15.968, 356.104],
+  [5, 6, 42.982, 16.679, 3.114 / 10.904, 23.243],
+  [5, 7, 32.311, 29.923, 7.502 / 24.955, 178.679],
 
-  [6, 1, 30.774, 11.772, 3.812 / 6.041, 341.8],
-  [6, 2, 30.536, 39.107, 2.598 / 13.605, 70.807],
-  [6, 2, 36.154, 16.480, 12.604 / 13.605, 346.208],
-  [6, 3, 43.243, 17.614, 3.947 / 7.881, 224.775],
-  [6, 4, 34.807, 26.134, 5.810 / 11.297, 334.174],
-  [6, 4, 38.734, 25.882, 5.810 / 11.297, 334.174],
-  [6, 4, 22.509, 17.928, 5.827 / 11.297, 335.893],
-  [6, 4, 18.806, 20.655, 5.147 / 11.297, 27.048],
-  [6, 4, 25.511, 17.814, 4.458 / 11.297, 335.893],
-  // [6, 4, 4.458, 1.411, ]
-  [6, 4, 30.084, 14.699, 2.821 / 11.297, 83.02],
-  [6, 5, 13.844, 40.422, 4.889 / 14.972, 336.891],
-  [6, 6, 18.875, 18.621, 3.749 / 11.294, 17.694],
-  [6, 7, 40.551, 35.909, 12.431 / 19.342, 354.69],
+  [6, 1, 30.774, 11.772, 4.108 / 6.041, 341.8],
+  [6, 2, 30.536, 39.107, 13.469 / 13.605, 70.807],
+  [6, 2, 36.154, 16.480, 12.432 / 13.605, 346.208],
+  [6, 3, 43.243, 17.614, 1.329 / 7.881, 224.775],
+  [6, 4, 34.807, 26.134, 5.736 / 11.297, 334.174],
+  [6, 4, 38.734, 25.882, 5.736 / 11.297, 334.174],
+  [6, 4, 22.509, 17.928, 5.736 / 11.297, 335.893],
+  [6, 4, 18.806, 20.655, 6.446 / 11.297, 27.048],
+  [6, 4, 25.511, 17.814, 4.388 / 11.297, 335.893],
+  [6, 4, 27.824, 17.614, 4.388 / 11.297, 335.893],
+  [6, 4, 30.084, 14.699, 5.455 / 11.297, 83.02],
+  [6, 5, 13.844, 40.422, 3.492 / 14.972, 336.891],
+  [6, 6, 18.875, 18.621, 4.812 / 11.294, 17.694],
+  [6, 7, 40.551, 35.909, 13.099 / 19.342, 354.69],
 ]
 
 // [locations]
@@ -454,27 +499,25 @@ export const IntroCanvas = () => {
   )
 }
 
-// 方向枚举
-enum CubeFace {
-  Front,
-  Back,
-  Left,
-  Right,
-  Top,
-  Bottom
-}
-
 function loadInitChars(maxDimension: number, edge: number): JSX.Element[] {
   let sprites = []
   // 遍历 spriteInitLocations
   let key = 0;
+  sprites.push(
+    <Sprite key={key} initialPosition={[0, -0.22, -0.22, 0.95, 0]} finalPosition={[0, 0, 0]} imagePath={"/intro/0.jpg"} opacity={1}
+      charID={key} GroupID={-1} />
+  )
+
   for (const loc of spriteInitLocations) {
+    key += 1;
+    // [Books, ID, X2D, Y2D, originW, originH, currentW, currrentH, angle]
     const [bookID, charID, initX2D, initY2D, scale, angle] = loc;
     const imagePath = `/intro/${(bookID - 1) * 7 + (charID)}.png`;
 
     const initX = ((initX2D / maxDimension) * edge) - edge / 2;
     const initY = ((initY2D / maxDimension) * edge) - edge / 2;
-    const initialPosition: [number, number, number, number, number] = [0, initX, -initY, scale, angle];
+    const angleR = angle / 180 * Math.PI;
+    const initialPosition: [number, number, number, number, number] = [0, initX - 0.5, -initY, scale, angle];
 
     const finalTmp = spriteFinalLocations[(bookID - 1) * 7 + (charID - 1)];
     const finalX = ((finalTmp[0] / maxDimension) * edge) - edge / 2;
@@ -482,53 +525,12 @@ function loadInitChars(maxDimension: number, edge: number): JSX.Element[] {
     const finalPosition: [number, number, number] = [finalX, -finalY, 0];
 
     sprites.push(
-      <Sprite key={key++} initialPosition={initialPosition} finalPosition={finalPosition} imagePath={imagePath} opacity={0.6}
+      <Sprite key={key} initialPosition={initialPosition} finalPosition={finalPosition} imagePath={imagePath} opacity={0.75}
         charID={key} GroupID={bookID} />
     )
   }
 
   return sprites;
-}
-
-function mapToCubeFace(locations: [number, number][], face: CubeFace, side: number): [number, number, number][] {
-  const maxDimension = 300;
-  const halfSide = side / 2;
-  const mappedLocations: [number, number, number][] = [];
-
-  locations.forEach(location => {
-    const [x2D, y2D] = location;
-
-    // 将二维坐标从左上角原点转换为立方体面中心为原点
-    const x = ((x2D / maxDimension) * side) - halfSide; // 现在范围是 [-side/2, side/2]
-    const y = ((y2D / maxDimension) * side) - halfSide; // 现在范围是 [-side/2, side/2]
-
-    let point3D: [number, number, number];
-
-    switch (face) {
-      case CubeFace.Front:
-        point3D = [x, -y, halfSide];
-        break;
-      case CubeFace.Back:
-        point3D = [-x, -y, -halfSide];
-        break;
-      case CubeFace.Left:
-        point3D = [-halfSide, -y, x];
-        break;
-      case CubeFace.Right:
-        point3D = [halfSide, -y, -x];
-        break;
-      case CubeFace.Top:
-        point3D = [x, -halfSide, -y];
-        break;
-      case CubeFace.Bottom:
-        point3D = [x, halfSide, y];
-        break;
-    }
-
-    mappedLocations.push(point3D);
-  });
-
-  return mappedLocations;
 }
 
 function getActualIntersect(intersects: Intersection[]): Intersection | null {

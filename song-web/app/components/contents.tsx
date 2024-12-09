@@ -14,12 +14,12 @@ interface OverallStatus {
 
   /* Canvas Status Usage */
   isCanvasLoaded: boolean;
-  isFinalSelected: boolean;
   rotationSpeed: number;
   initCubeSize: number;
   cubeScale: number;
   selectedID: number;
   selectedGID: number;
+  selectLevel: number;
 
   /* Store Status */
   storeRef: React.RefObject<HTMLDivElement>;
@@ -36,13 +36,13 @@ export function Contents() {
     introRef: useRef<HTMLDivElement>(null),
     /* Canvas Status Usage */
     isCanvasLoaded: false,
-    isFinalSelected: false,
     // rotationSpeed: 0.1,
     rotationSpeed: 0.0,
     initCubeSize: 2.5,
     cubeScale: 1,
     selectedID: -1,
     selectedGID: -1,
+    selectLevel: 0,
 
     /* Store Status */
     storeRef: useRef<HTMLDivElement>(null),
@@ -96,7 +96,7 @@ const Intro = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
         }, 100);
       }, 500);
     } else if (id == 1) {
-      overallStatus.current.isFinalSelected = true;
+      overallStatus.current.selectLevel = 2;
       overallStatus.current.selectedGID = Math.floor(Math.random() * 6);
 
       // 设置介绍文字
