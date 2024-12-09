@@ -48,8 +48,11 @@ def process_images_in_directory(input_dir, output_dir, locales=["zh"]):
                             output_dir,
                             f"{os.path.splitext(filename)[0]}_{char_info['text']}_{idx}.png",
                         )
-                        processed_img.save(cropped_filename)
-                        print(f"Saved processed character to {cropped_filename}")
+                        try:
+                            processed_img.save(cropped_filename)
+                            print(f"Saved processed character to {cropped_filename}")
+                        except OSError as e:
+                            print(f"Error saving processed character: {e}")
             else:
                 # Save the image with 'unrecognized' if no text is recognized
                 unrecognized_filename = os.path.join(

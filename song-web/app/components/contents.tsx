@@ -11,6 +11,7 @@ interface OverallStatus {
   /* Intro Status */
   isIntroEnd: boolean;
   introRef: React.RefObject<HTMLDivElement>;
+
   /* Canvas Status Usage */
   isCanvasLoaded: boolean;
   isFinalSelected: boolean;
@@ -36,7 +37,8 @@ export function Contents() {
     /* Canvas Status Usage */
     isCanvasLoaded: false,
     isFinalSelected: false,
-    rotationSpeed: 0.1,
+    // rotationSpeed: 0.1,
+    rotationSpeed: 0.0,
     initCubeSize: 2.5,
     cubeScale: 1,
     selectedID: -1,

@@ -10,8 +10,8 @@ def main(filename):
     DOIT(
         filename,
         outdir=output,
-        vThreshVal=1,
-        maxVThreshVal=20,
+        vThreshVal=10,
+        maxVThreshVal=50,
         hThreshVal=0.5,
         maxHThreshVal=0.5,
         hMergeThresh=100, # means all merge, only vertical split

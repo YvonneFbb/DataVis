@@ -7,7 +7,8 @@ import { OverallContext } from "./contents";
 import { zip } from "d3";
 
 interface SpriteProps {
-  initialPosition: [number, number, number];
+  // x, y, z, scale, angle
+  initialPosition: [number, number, number, number, number];
   finalPosition: [number, number, number];
   imagePath: string;
   opacity: number;
@@ -95,7 +96,7 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
   }, [texture]);
 
   return (
-    <sprite ref={spriteRef} position={initialPosition} userData={{ "charID": charID, "groupID": GroupID }}>
+    <sprite ref={spriteRef} position={[initialPosition[0], initialPosition[1], initialPosition[2]]} userData={{ "charID": charID, "groupID": GroupID }}>
       <spriteMaterial attach="material" map={texture} transparent opacity={opacity} alphaTest={0.2} />
     </sprite>
   );
@@ -171,7 +172,8 @@ const CameraController = () => {
 
           } else {
             // 进入选择状态
-            overallStatus.current.rotationSpeed = 0.02;
+            // overallStatus.current.rotationSpeed = 0.02;
+            overallStatus.current.rotationSpeed = 0.00;
             overallStatus.current.cubeScale = 1.5;
             overallStatus.current.selectedID = obj.userData["charID"];
 
@@ -183,7 +185,8 @@ const CameraController = () => {
         } else {
           if (lastSelected.current) {
             // 退出选择
-            overallStatus.current.rotationSpeed = 0.1;
+            // overallStatus.current.rotationSpeed = 0.1;
+            overallStatus.current.rotationSpeed = 0.0;
 
             exitSelectTimeout.current = setTimeout(() => {
               if (!lastSelected.current) {
