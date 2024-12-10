@@ -15,6 +15,11 @@
 }
 
 @font-face {
+  font-family: 'MyCN_FZJ';
+  src: url(/fonts/cn_FZJuZXFJW.ttf);
+}
+
+@font-face {
   font-family: 'MyEN_DIN';
   src: url(/fonts/en_DIN.otf);
 }
@@ -32,6 +37,11 @@
 @font-face {
   font-family: 'MyEN_DIN_Medium';
   src: url(/fonts/en_DIN-Medium.otf);
+}
+
+@font-face {
+  font-family: 'MyEN_Gara';
+  src: url(/fonts/en_GaramondPremrPro-Disp.otf);
 }
 
 
@@ -728,7 +738,7 @@ html {
     padding: 20px;
     border-radius: 10px;
     color: white;
-    font-family: 'MyCN_K';
+    font-family: 'MyCN_FZJ';
     text-align: left;
     opacity: 0;
     visibility: hidden;
@@ -741,6 +751,7 @@ html {
   }
 
   .intro-chardesc-title {
+    font-family: 'MyCN_K';
     font-size: 24px;
     color: #A2483D;
     margin-bottom: 10px;
@@ -751,7 +762,7 @@ html {
     font-size: 18px;
     color: #bbb;
     margin-bottom: 20px;
-    font-family: 'MyEN_AG';
+    font-family: 'MyEN_Gara';
   }
 
   .intro-chardesc-caption {
@@ -974,16 +985,22 @@ html {
   .event-subtitle,
   .event-date,
   .event-content {
-    font-family: 'MyCN_K';
+    font-family: 'MyCN_FZJ';
     font-size: 16px;
     color: #000;
     writing-mode: vertical-rl;
     margin: 0 10px 0 0;
   }
 
+  .event-title {
+    font-family: 'MyCN_K';
+  }
+
+
   .event-date {
-    font-family: 'MyEN_AG';
+    font-family: 'MyEN_Gara';
     font-weight: bold;
+    font-size: large;
     margin-left: 10px;
   }
 

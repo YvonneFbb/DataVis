@@ -52,14 +52,13 @@ export function Contents() {
 
   const [isIntroEnd, setIsIntroEnd] = useState(false);
   const introShallEnd = () => {
-    console.log('setting');
     setIsIntroEnd(true);
   }
 
   useEffect(() => {
     if (isIntroEnd) {
     } else {
-      document.getElementById('status-bar')!.innerText = "选择「永」字笔画探索时间轴";
+      document.getElementById('status-bar')!.innerText = "选择「宋」字笔画探索时间轴";
     }
   }, [isIntroEnd]);
 
@@ -83,8 +82,9 @@ const Intro = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
     if (id == 0) {
       // Click the final view button
       const introRef = overallStatus.current.introRef.current!;
-      const charDesc = charDescGroups[(overallStatus.current.selectedGID)];
+      const charDesc = charDescGroups[(overallStatus.current.selectedGID - 1)];
 
+      console.log(charDesc.page)
       overallStatus.current.currentPage = charDesc.page;
 
       introRef.style.opacity = '0';
@@ -101,7 +101,7 @@ const Intro = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
 
       // 设置介绍文字
       const introRef = overallStatus.current.introRef.current!;
-      const charDesc = charDescGroups[(overallStatus.current.selectedGID)];
+      const charDesc = charDescGroups[(overallStatus.current.selectedGID - 1)];
 
       (introRef.querySelector('.intro-chardesc-title') as HTMLElement).innerText = charDesc.title;
       (introRef.querySelector('.intro-chardesc-subtitle') as HTMLElement).innerText = 'AD ' + charDesc.year;

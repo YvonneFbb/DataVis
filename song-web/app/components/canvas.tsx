@@ -59,7 +59,11 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
           spriteRef.current.position.lerp(targetPosition.current, 0.1);
           spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220 * initialPosition[3], texture.image.height / 220 * initialPosition[3], 1), 0.5);
           spriteRef.current.material.rotation += (initialPosition[4] / 180 * Math.PI - spriteRef.current.material.rotation) * 0.5;
-          spriteRef.current.material.opacity += (opacity - spriteRef.current.material.opacity) * 0.5;
+          if (charID == 0) {
+            spriteRef.current.material.opacity += (opacity - spriteRef.current.material.opacity) * 0.1;
+          } else {
+            spriteRef.current.material.opacity += (0 - spriteRef.current.material.opacity) * 0.1;
+          }
 
         } break;
         case 1: {
@@ -95,7 +99,6 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
 
           // 选择操作
           if (overallStatus.current.selectedID == charID) {
-            console.log('Selected: ', charID, spriteInitLocations[charID - 1]);
             spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220, texture.image.height / 220, 1), 0.03);
             spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.1;
           } else {
@@ -109,14 +112,14 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
             reachFinal.current = true;
             setTimeout(() => {
               finalEnd.current = true;
-            }, 1000 * 15);
+            }, 1000 * 8);
           }
 
           if (overallStatus.current.selectedGID != GroupID) {
             // 不相关笔画
             finalSpeed.current += (2 - finalSpeed.current) * 0.04;
             finalScale.current += (5 - finalScale.current) * 0.04;
-            finalSize.current += (0 - finalSize.current) * 0.06;
+            finalSize.current += (0 - finalSize.current) * 0.04;
 
             // angle.current += 1 / 60 * finalSpeed.current;
 
@@ -138,8 +141,8 @@ const Sprite: React.FC<SpriteProps> = ({ initialPosition, finalPosition, imagePa
             // 留存笔画
             spriteRef.current.scale.lerp(new Vector3(texture.image.width / 220, texture.image.height / 220, 1), 0.05);
             spriteRef.current.material.opacity += (1 - spriteRef.current.material.opacity) * 0.01;
-            spriteRef.current.material.rotation += (0 - spriteRef.current.material.rotation) * 0.01;
-            spriteRef.current.position.lerp(new Vector3(finalPosition[0], finalPosition[1], finalPosition[2]), 0.01);
+            spriteRef.current.material.rotation += (0 - spriteRef.current.material.rotation) * 0.02;
+            spriteRef.current.position.lerp(new Vector3(finalPosition[0], finalPosition[1], finalPosition[2]), 0.02);
           }
         } break;
       }
@@ -256,7 +259,7 @@ const CameraController = () => {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, []);
+  });
 
   // 更新选择进度
   useFrame(() => {
@@ -268,7 +271,7 @@ const CameraController = () => {
 
           // 设置介绍文字
           const introRef = overallStatus.current.introRef.current!;
-          const charDesc = charDescGroups[(overallStatus.current.selectedGID)];
+          const charDesc = charDescGroups[(overallStatus.current.selectedGID - 1)];
           (introRef.querySelector('.intro-chardesc-title') as HTMLElement).innerText = charDesc.title;
           (introRef.querySelector('.intro-chardesc-subtitle') as HTMLElement).innerText = 'AD ' + charDesc.year;
           (introRef.querySelector('.intro-chardesc-caption') as HTMLElement).innerText = charDesc.caption;
@@ -465,12 +468,12 @@ type CharDesc = {
 }
 
 export const charDescGroups: CharDesc[] = [
-  { title: "《窦氏联珠集》", year: 1178, page: 7, caption: "略带褚遂良笔意", desc: "淳熙五年蕲州刻本《窦氏联珠集》略带褚遂良笔意，在宋代版刻楷书中别具一格。" },
-  { title: "《昆山杂咏》", year: 1207, page: 8, caption: "近于行楷的字体", desc: "宋开禧三年昆山县斋刻本《昆山杂咏》以行楷笔意写稿，多有连笔及简写处。提按顿挫，笔意毕现。结字流美而富有新意，绝非俗手所书。" },
-  { title: "《新定三礼图》", year: 1175, page: 7, caption: "欧颜型", desc: "到了南宋中期，近欧型依然盛行，其他三种类型则较为少见。欧颜型仅见于宋淳熙二年镇江府学刻公文纸印本《新定三礼图》一书，惜笔画细瘦，俊美有余，古意不足。" },
-  { title: "《事类赋》", year: 1146, page: 6, caption: "近欧型", desc: "绍兴十六年两浙东路茶盐司刻本《事类赋》，半页八行，行十六至二十字不等。小字双行，行二十五至二十七字不等。白口，左右双边。书字体取法欧阳，字口清晰。" },
   { title: "《渭南文集》", year: 1220, page: 8, caption: "程式化", desc: "原本鲜活的欧字，逐步向程式化方向发展。这类风格占据了现存南宋中期浙本书籍的大多数，如：宋嘉定十三年陆子遹溧阳学宫刻本《渭南文集》。" },
-  { title: "《窦氏联珠集》", year: 1178, page: 7, caption: "略带褚遂良笔意", desc: "淳熙五年蕲州刻本《窦氏联珠集》略带褚遂良笔意，在宋代版刻楷书中别具一格。" },
+  { title: "《长短经》", year: 1127, page: 6, caption: "近欧型", desc: "南宋初年杭州净戒院刻本《长短经》，字形瘦长，戈戟森严。看似平正，实则险劲。具备欧体字的大多特征。" },
+  { title: "《资治通鉴》", year: 1132, page: 6, caption: "（多半字体）欧颜型", desc: "绍兴二至三年两浙东路茶盐司公使库刻本《资治通鉴》字体多半采用欧颜型。" },
+  { title: "《昆山杂咏》", year: 1207, page: 8, caption: "近于行楷的字体", desc: "宋开禧三年昆山县斋刻本《昆山杂咏》以行楷笔意写稿，多有连笔及简写处。提按顿挫，笔意毕现。结字流美而富有新意，绝非俗手所书。" },
+  { title: "《尚书正义》", year: 1127, page: 6, caption: "近欧型", desc: "字形瘦长，戈戟森严。看似平正，实则险劲。具备欧体字的大多特征。" },
+  { title: "《汉官仪》", year: 1139, page: 6, caption: "近柳型", desc: "绍兴九年临安府刻《汉官仪》字体爽利挺秀，骨力遒劲，具有典型柳体特征。传世南宋前期两浙地区刻本采用柳体者不多见。" },
 ]
 
 
@@ -504,7 +507,7 @@ function loadInitChars(maxDimension: number, edge: number): JSX.Element[] {
   // 遍历 spriteInitLocations
   let key = 0;
   sprites.push(
-    <Sprite key={key} initialPosition={[1, -0.22, -0.22, 0.95, 0]} finalPosition={[0, 0, 0]} imagePath={"/intro/0.jpg"} opacity={1}
+    <Sprite key={key} initialPosition={[0, -0.22, 0.22, 1, 0]} finalPosition={[0, 0, 0]} imagePath={"/intro/0.jpg"} opacity={1}
       charID={key} GroupID={-1} />
   )
 
@@ -517,7 +520,7 @@ function loadInitChars(maxDimension: number, edge: number): JSX.Element[] {
     const initX = ((initX2D / maxDimension) * edge) - edge / 2;
     const initY = ((initY2D / maxDimension) * edge) - edge / 2;
     const angleR = angle / 180 * Math.PI;
-    const initialPosition: [number, number, number, number, number] = [0, initX - 0.5, -initY, scale, angle];
+    const initialPosition: [number, number, number, number, number] = [0, initX - 0.5, 0.5 - initY, scale, angle];
 
     const finalTmp = spriteFinalLocations[(bookID - 1) * 7 + (charID - 1)];
     const finalX = ((finalTmp[0] / maxDimension) * edge) - edge / 2;
