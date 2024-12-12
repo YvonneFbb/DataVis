@@ -143,13 +143,13 @@ const Intro = forwardRef<HTMLDivElement, ContProps>(({ shallEnd }, ref) => {
         <div className='intro-desc-container'>
           <div className='intro-desc-left'>
             <p className='intro-desc-text'>
-              宋代刻本之美在于字体、板式。我们特地整理分析了宋刻板中楷书字体的发展时间史及江浙、四川、福建三地宋刻本中楷书字体的异同和字体倾向，以数据可视化的形式展示楷书及宋刻本书体演变史。
+              宋代刻本之美在于字体、版式。我们特地整理了宋刻板中楷书字体的发展时间史及浙江、四川、福建三地宋刻本中楷书字体的异同和字体倾向，以数据可视化的形式展示宋刻本书体演变史。
             </p>
           </div>
           <div className='intro-desc-divider'></div>
           <div className='intro-desc-right'>
             <p className='intro-desc-text'>
-              两宋时期宋版书
+              宋版书
             </p>
           </div>
         </div>
