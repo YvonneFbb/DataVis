@@ -243,7 +243,7 @@ export function LoadEvents() {
                 { event: { year: 1172, len: 1, contents: [{ name: "《毗卢院施主忌晨记》", src: "《毗卢院施主忌晨记》.png", title: "<span class='yan-char'>颜</span>字", desc: "古代四川地区刻书通常被称作“蜀本”、“川本”等。唐宋时期，四川地区颜体较为流行。南宋乾道八年夹江《毗卢院施主忌晨记》笔画肥劲朴厚，结体宽博，颜体特征极其明显。" }] }, type: EventType.Contents },
                 { event: { name: "淳熙", year: 1174 }, type: EventType.Year },
                 { event: { year: 1175, len: 1, contents: [{ name: "《新定三礼图》", src: "《新定三礼图》.jpg", title: "<span class='ou-char'>欧</span><span class='yan-char'>颜</span>型", desc: "到了南宋中期，近欧型依然盛行，其他三种类型则较为少见。欧颜型仅见于宋淳熙二年镇江府学刻公文纸印本《新定三礼图》一书，惜笔画细瘦，俊美有余，古意不足。" }] }, type: EventType.Contents },
-                { event: { year: 1178, len: 1, contents: [{ name: "《窦氏联珠集》", src: "《窦氏联珠集》.jpg", title: "略带褚遂良笔意", desc: "略带褚遂良笔意，在宋代版刻楷书中别具一格。" }] }, type: EventType.Contents },
+                { event: { year: 1178, len: 1, contents: [{ name: "《窦氏联珠集》", src: "《窦氏联珠集》.jpg", title: "略带褚遂良笔意", desc: "宋淳熙五年，略带褚遂良笔意，在宋代版刻楷书中别具一格。" }] }, type: EventType.Contents },
                 { event: { name: "绍熙", year: 1190 }, type: EventType.Year },
                 { event: { name: "宋光宗赵惇", year: 1190, src: "赵惇.png" }, type: EventType.Empire },
                 { event: { year: 1193, len: 1, contents: [{ name: "《春秋公羊经传解诂》", src: "《春秋公羊经传解诂》.jpg", title: "近<span class='yan-char'>颜</span>字《多宝塔》字体", desc: "宋淳熙抚州公使库刻绍熙四年重修本《春秋公羊经传解诂》采用了一种方正平缓、布白均衡、近于颜字《多宝塔》的字体。" }] }, type: EventType.Contents },
