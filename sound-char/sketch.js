@@ -1,6 +1,8 @@
 let canvas_quad = 1000
 let char_quad = 60
-let gate = 50
+let gate = 30
+let drawType = 0
+let debugPoint = 0
 
 let sampler
 let bepoints
@@ -43,15 +45,15 @@ class Sampler {
       }
     }
 
-    return {
-      loudness: this.loudness,
-      centroid: this.centroid
-    }
-
     // return {
-    //   loudness: 150,
-    //   centroid: 1000
+    //   loudness: this.loudness,
+    //   centroid: this.centroid
     // }
+
+    return {
+      loudness: 50,
+      centroid: 1000
+    }
   }
 
   active () {
@@ -63,52 +65,52 @@ class BePoints {
   constructor () {
     this.points = []
     this.interpolatedPoints = []
-    this.index = 0
+    this.blockIndex = 0
+    this.pointIndex = 0
     this.xsize = 70
     this.ysize = 150
 
     this.x = 75
     this.y = canvas_quad / 2 - 50
-    for (let i = 0; i < 5; i++) {
-      todo.push([this.x, this.y])
-      this.x += 5
-    }
   }
 
   addBlock (coordinates) {
     // Points are [0~60, 0~60] squares
+    let block = []
     for (let i = 0; i < coordinates.length; i++) {
       let [x, y] = coordinates[i]
       x = this.x + (x / char_quad) * this.xsize
       y = this.y + (y / char_quad - 0.5) * this.ysize
       // console.log('add points: ', x, y)
-      this.points.push(createVector(x, y))
+      block.push(createVector(x, y))
     }
-
+    this.points.push(block)
     this.x += this.xsize
   }
 
   interpolatePoints () {
-    if (this.points.length < 2) return
+    for (let block of this.points) {
+      let interpolateBlocks = []
+      for (let i = 0; i < block.length - 1; i++) {
+        let start = block[i]
+        let end = block[i + 1]
 
-    for (let i = 0; i < this.points.length - 1; i++) {
-      let start = this.points[i]
-      let end = this.points[i + 1]
-
-      let numNewPoints = 6
-      for (let j = 0; j <= numNewPoints; j++) {
-        let t = j / (numNewPoints + 1)
-        let interpolatedPoint = p5.Vector.lerp(start, end, t)
-        // console.log('interpolated points: ', interpolatedPoint)
-        this.interpolatedPoints.push(interpolatedPoint)
+        let numNewPoints = 2
+        for (let j = 0; j <= numNewPoints; j++) {
+          let t = j / (numNewPoints + 1)
+          let interpolatedPoint = p5.Vector.lerp(start, end, t)
+          interpolateBlocks.push(interpolatedPoint)
+          // console.log('interpolated points: ', interpolatedPoint)
+        }
       }
+      this.interpolatedPoints.push(interpolateBlocks)
     }
 
-    // console.log(this.interpolatedPoints)
+    console.log(this.interpolatedPoints)
   }
 
   pop (loudness, centroid) {
-    let skip = floor(map(centroid, 0, 4000, 6, 1))
+    let skip = floor(map(centroid, 2000, 4000, 6, 1))
     skip = skip < 1 ? 1 : skip
 
     let scaleX
@@ -120,44 +122,30 @@ class BePoints {
       // scaleX = map(loudness, gate, 255, 0.8, 1.25)
       scaleY = map(loudness, gate, 150, 0.75, 1.5)
     }
-    console.log(loudness, centroid, skip, scaleY)
+    // console.log(loudness, centroid, skip, scaleY)
 
-    if (this.index + skip >= this.interpolatedPoints.length) {
+    if (this.blockIndex >= this.interpolatedPoints.length) {
+      return null
+    }
+    if (this.pointIndex >= this.interpolatedPoints[this.blockIndex].length) {
+      this.pointIndex = 0
+      this.blockIndex += 1
+    }
+    if (this.blockIndex >= this.interpolatedPoints.length) {
       return null
     }
 
-    let p = this.interpolatedPoints[this.index]
-    this.index += skip
+    let p = this.interpolatedPoints[this.blockIndex][this.pointIndex]
+    this.pointIndex += skip
 
     // Processing points
     // p.x *= scaleX
-    p.y = (p.y - canvas_quad / 2) * scaleY + canvas_quad / 2
+    p.y = (p.y - this.y) * scaleY + this.y
 
-    return p
-  }
-
-  all (loudness, centroid) {
-    let skip = floor(map(centroid, 0, 8000, 5, 1))
-    skip = skip < 1 ? 1 : skip
-
-    let scaleY
-    if (loudness < gate) {
-      scaleY = map(loudness, 0, gate, 0, 0.6)
-    } else {
-      scaleY = map(loudness, gate, 150, 0.75, 1.5)
+    return {
+      block: this.blockIndex + 1,
+      point: [p.x, p.y]
     }
-
-    let result = []
-    for (let i = 0; i < this.interpolatedPoints.length; i += skip) {
-      let p = this.interpolatedPoints[i].copy()
-
-      // Processing points
-      p.y = (p.y - canvas_quad / 2) * scaleY + canvas_quad / 2
-
-      result.push([p.x, p.y])
-    }
-
-    return result
   }
 }
 
@@ -170,6 +158,28 @@ function setup () {
   sampler = new Sampler(300)
   bepoints = new BePoints()
 
+  // Init lines
+  switch (drawType) {
+    case 0:
+      {
+        let eblock = []
+        for (let i = 0; i < 4; i++) {
+          eblock.push([bepoints.x, bepoints.y])
+          bepoints.x += 5
+        }
+        todo.push(eblock)
+      }
+      break
+    case 1:
+      {
+        for (let i = 0; i < 4; i++) {
+          todo.push([bepoints.x, bepoints.y])
+          bepoints.x += 5
+        }
+      }
+      break
+  }
+
   bepoints.addBlock(char_data.q)
   bepoints.addBlock(char_data.i)
   bepoints.addBlock(char_data.n)
@@ -181,30 +191,66 @@ function setup () {
 
 function draw () {
   let s = sampler.sample()
-  // image(bgImage, 0, 0, canvas_quad, canvas_quad);
-  // console.log(s)
 
   if (sampler.active) {
-    {
-      // Ok, here we do our jobs
-      let p = bepoints.pop(s.loudness, s.centroid)
+    switch (drawType) {
+      case 0:
+        {
+          // Ok, here we do our jobs
+          let p = bepoints.pop(s.loudness, s.centroid)
+          // console.log(p, todo)
+          if (p) {
+            background(255, 30)
+            image(bgImage, 0, canvas_quad / 3, canvas_quad / 3, canvas_quad / 3)
+            if (p.block >= todo.length) {
+              todo.push([])
+              todo[p.block].push(todo[p.block - 1].at(-2))
+              todo[p.block].push(todo[p.block - 1].at(-1))
+            }
+            todo[p.block].push(p.point)
+            push()
+            noFill()
+            stroke(0)
+            strokeWeight(4)
+            for (let block of todo) {
+              p5bezier.draw(block, 'OPEN', 2)
+            }
+            pop()
 
-      if (p) {
-        background(255, 20)
-        image(bgImage, 0, canvas_quad / 3, canvas_quad / 3, canvas_quad / 3)
-        todo.push([p.x, p.y])
+            // console.log(todo)
+            if (debugPoint) {
+              for (let block of todo) {
+                for (let i = 0; i < block.length; i++) {
+                  let p = block[i]
+                  fill(255, 0, 0)
+                  ellipse(p[0], p[1], 5, 5)
+                }
+              }
+            }
+          }
+        }
+        break
+      case 1: {
+        let p = bepoints.pop(s.loudness, s.centroid)
+        if (p) {
+          background(255, 30)
+          image(bgImage, 0, canvas_quad / 3, canvas_quad / 3, canvas_quad / 3)
 
-        push()
-        noFill()
-        stroke(0)
-        strokeWeight(4)
-        if (todo.length >= 2) p5bezier.draw(todo)
-        pop()
+          todo.push(p.point)
+          push()
+          noFill()
+          stroke(0)
+          strokeWeight(4)
+          p5bezier.draw(todo, 'OPEN', 2)
+          pop()
 
-        for (let i = 0; i < todo.length; i++) {
-          let p = todo[i]
-          fill(255, 0, 0)
-          ellipse(p[0], p[1], 5, 5)
+          if (debugPoint) {
+            for (let i = 0; i < todo.length; i++) {
+              let p = todo[i]
+              fill(255, 0, 0)
+              ellipse(p[0], p[1], 5, 5)
+            }
+          }
         }
       }
     }
@@ -218,7 +264,6 @@ function draw () {
     //   strokeWeight(3)
     //   if (all_points.length >= 2) p5bezier.draw(all_points)
     //   pop()
-
     //   // for (let i = 0; i < all_points.length; i++) {
     //   //   let p = all_points[i]
     //   //   fill(255, 0, 0)
