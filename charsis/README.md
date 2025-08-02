@@ -5,7 +5,7 @@
 ## 项目结构
 
 ```
-/Users/yinwhe/Desktop/Fbb/DataVis/charsis/
+charsis/
 ├── data/
 │   ├── raw/                # 存放原始输入图片
 │   └── results/            # 统一的结果输出目录

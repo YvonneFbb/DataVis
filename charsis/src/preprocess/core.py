@@ -1,7 +1,10 @@
-
 import cv2
 import os
 import numpy as np
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import RAW_DIR, PREPROCESSED_DIR
+from utils.path import ensure_dir, get_output_path
 
 def preprocess_image(input_path, output_path, alpha=1.5, beta=10):
     """
@@ -39,22 +42,15 @@ if __name__ == '__main__':
     BETA = 10    # 亮度 (建议范围: 0 ~ 100)
     # --------------------
 
-    # 定义输入和输出目录
-    INPUT_DIR = 'input'
-    OUTPUT_DIR = 'output'
-    
     # 确保输出目录存在
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    ensure_dir(PREPROCESSED_DIR)
 
-    # 构建输入和输出文件路径
-    input_file = os.path.join(INPUT_DIR, 'demo.jpg')
+    # 构建输入文件路径（从data/raw目录读取）
+    input_file = os.path.join(RAW_DIR, 'demo.jpg')
     
     # 根据参数生成动态输出文件名
     file_name, file_ext = os.path.splitext(os.path.basename(input_file))
-    output_file = os.path.join(
-        OUTPUT_DIR, 
-        f"{file_name}_preprocessed_alpha{ALPHA}_beta{BETA}{file_ext}"
-    )
+    output_filename = f"{file_name}_preprocessed_alpha{ALPHA}_beta{BETA}{file_ext}"
+    output_file = os.path.join(PREPROCESSED_DIR, output_filename)
 
     preprocess_image(input_file, output_file, alpha=ALPHA, beta=BETA)
