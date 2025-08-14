@@ -9,10 +9,10 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import CHAR_CLASSIFICATION_CONFIG
-from .detection import analyze_character_dimensions, detect_vertically_connected_chars, detect_wide_chars, reclassify_split_character
-from .projection import horizontal_projection_split_vertical_chars, vertical_projection_split_wide_chars
-from .merger import merge_narrow_characters
-from .visualization import annotate_characters, save_annotated_image, print_classification_stats, create_legend_image
+from detection import analyze_character_dimensions, detect_vertically_connected_chars, detect_wide_chars, reclassify_split_character
+from projection import horizontal_projection_split_vertical_chars, vertical_projection_split_wide_chars
+from merger import merge_narrow_characters
+from visualization import annotate_characters, save_annotated_image, print_classification_stats, create_legend_image
 
 
 def segment_characters(image_path, output_dir=None, min_char_size=None, dilation_iterations=None):

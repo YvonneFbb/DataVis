@@ -39,14 +39,26 @@ RECLASSIFY_CONFIG = {
     'wide_threshold': 1.5,         # 宽字符宽度比例阈值
 }
 
-# 投影分析参数
+# 投影分析参数 - 改进版本
 PROJECTION_CONFIG = {
-    'smoothing_kernel_size': 3,     # 投影平滑核大小
-    'projection_threshold_ratio': 0.3,  # 投影阈值比例
-    'adjacent_tolerance': 3,        # 相邻行/列容差
+    # 原有参数（保持兼容性）
+    'smoothing_kernel_size': 3,     # 投影平滑核大小（已弃用，使用高斯平滑）
+    'projection_threshold_ratio': 0.3,  # 投影阈值比例（已弃用，使用自适应阈值）
+    'adjacent_tolerance': 3,        # 相邻行/列容差（已弃用）
     'min_segment_height_ratio': 0.4,  # 最小分割高度比例
     'min_segment_width_ratio': 0.4,   # 最小分割宽度比例
     'min_final_height_ratio': 0.3,   # 最终最小高度比例
+    
+    # 新增改进版本参数
+    'gaussian_sigma_ratio': 20,     # 高斯核标准差比例 (sigma = mean_size / ratio)
+    'adaptive_percentile_low': 25,  # 自适应阈值低分位数
+    'adaptive_percentile_high': 75, # 自适应阈值高分位数
+    'adaptive_threshold_offset': 0.2, # 自适应阈值偏移系数
+    'valley_min_distance_ratio': 4,   # 谷值最小间距比例 (distance = mean_size / ratio)
+    'valley_prominence': 0.1,       # 谷值显著性阈值
+    'boundary_exclusion_ratio': 0.1, # 边界排除比例
+    'validation_min_segment_ratio': 0.3, # 验证最小段长度比例
+    'max_splits_limit': 5,          # 最大分割数限制
 }
 
 # 红红合并参数
