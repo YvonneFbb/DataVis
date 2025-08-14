@@ -180,5 +180,5 @@ output/
 logs/
 
 # IDE files
-.trae/cache/
-.trae/temp/
+.claude
+CLAUDE.md
