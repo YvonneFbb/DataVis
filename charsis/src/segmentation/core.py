@@ -8,11 +8,12 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import CHAR_CLASSIFICATION_CONFIG
-from detection import analyze_character_dimensions, detect_vertically_connected_chars, detect_wide_chars, reclassify_split_character
-from projection import horizontal_projection_split_vertical_chars, vertical_projection_split_wide_chars
-from merger import merge_narrow_characters
-from visualization import annotate_characters, save_annotated_image, print_classification_stats, create_legend_image
+from config import CHAR_CLASSIFICATION_CONFIG, VL_CHARACTER_EVALUATION_CONFIG, VL_SEGMENTS_DIR, VL_ANNOTATIONS_DIR
+from .detection import analyze_character_dimensions, detect_vertically_connected_chars, detect_wide_chars, reclassify_split_character
+from .projection import horizontal_projection_split_vertical_chars, vertical_projection_split_wide_chars
+from .merger import merge_narrow_characters
+from .visualization import annotate_characters, save_annotated_image, print_classification_stats, create_legend_image
+from vl.character_evaluator import VLCharacterEvaluator
 
 
 def segment_characters(image_path, output_dir=None, min_char_size=None, dilation_iterations=None):
@@ -128,28 +129,121 @@ def segment_characters(image_path, output_dir=None, min_char_size=None, dilation
     
     print(f"合并后字符数: {len(merged_chars)}")
     
+    # VL字符质量评估
+    filtered_chars = merged_chars
+    vl_stats = {}
+    
+    if VL_CHARACTER_EVALUATION_CONFIG.get('enabled', False) and output_dir:
+        print(f"\n=== VL字符质量评估 ===")
+        try:
+            # 使用VL专用目录结构
+            base_name = os.path.splitext(os.path.basename(image_path))[0]
+            vl_output_dir = os.path.join(VL_SEGMENTS_DIR, base_name)
+            char_images_dir = os.path.join(vl_output_dir, "char_images")
+            os.makedirs(char_images_dir, exist_ok=True)
+            
+            # 同时在VL标注目录创建对应文件夹
+            vl_annotation_dir = os.path.join(VL_ANNOTATIONS_DIR, base_name)
+            os.makedirs(vl_annotation_dir, exist_ok=True)
+            
+            char_image_paths = []
+            for i, (x, y, w, h, char_type) in enumerate(merged_chars):
+                char_img = image[y:y+h, x:x+w]
+                char_img_path = os.path.join(char_images_dir, f"char_{i:04d}.png")
+                cv2.imwrite(char_img_path, char_img)
+                char_image_paths.append(char_img_path)
+            
+            print(f"已保存 {len(char_image_paths)} 个字符图片用于VL评估")
+            
+            # 使用VL模型评估字符质量
+            evaluator = VLCharacterEvaluator()
+            evaluation_results = evaluator.evaluate_batch(char_image_paths)
+            
+            # 根据评估结果过滤字符
+            quality_threshold = VL_CHARACTER_EVALUATION_CONFIG.get('quality_threshold', ['GOOD'])
+            filtered_chars = []
+            
+            for i, char in enumerate(merged_chars):
+                if i < len(evaluation_results):
+                    quality = evaluation_results[i].get('quality', 'UNCLEAR')
+                    if quality in quality_threshold:
+                        filtered_chars.append(char)
+                else:
+                    # 评估失败的字符保留
+                    filtered_chars.append(char)
+            
+            vl_stats = {
+                'total_evaluated': len(evaluation_results),
+                'good_chars': len([r for r in evaluation_results if r.get('quality') == 'GOOD']),
+                'partial_chars': len([r for r in evaluation_results if r.get('quality') == 'PARTIAL']),
+                'multiple_chars': len([r for r in evaluation_results if r.get('quality') == 'MULTIPLE']),
+                'noise_chars': len([r for r in evaluation_results if r.get('quality') == 'NOISE']),
+                'unclear_chars': len([r for r in evaluation_results if r.get('quality') == 'UNCLEAR']),
+                'filtered_count': len(merged_chars) - len(filtered_chars),
+                'final_count': len(filtered_chars)
+            }
+            
+            print(f"VL评估完成:")
+            print(f"  评估字符数: {vl_stats['total_evaluated']}")
+            print(f"  优质字符: {vl_stats['good_chars']}")
+            print(f"  不完整字符: {vl_stats['partial_chars']}")
+            print(f"  多字符: {vl_stats['multiple_chars']}")
+            print(f"  噪音字符: {vl_stats['noise_chars']}")
+            print(f"  不清楚字符: {vl_stats['unclear_chars']}")
+            print(f"  过滤字符数: {vl_stats['filtered_count']}")
+            print(f"  最终字符数: {vl_stats['final_count']}")
+            
+            # 保存VL筛选后的字符图片到VL目录
+            print(f"保存VL筛选后的字符图片...")
+            filtered_chars_dir = os.path.join(vl_output_dir, "filtered_chars")
+            os.makedirs(filtered_chars_dir, exist_ok=True)
+            
+            for i, (x, y, w, h, char_type) in enumerate(filtered_chars):
+                char_img = image[y:y+h, x:x+w]
+                filtered_char_path = os.path.join(filtered_chars_dir, f"char_{i:04d}.png")
+                cv2.imwrite(filtered_char_path, char_img)
+            
+            print(f"已保存 {len(filtered_chars)} 个VL筛选后的字符图片到: {filtered_chars_dir}")
+            
+        except Exception as e:
+            print(f"VL字符质量评估失败: {e}")
+            print("将使用未过滤的字符结果")
+            filtered_chars = merged_chars
+    
     # 字符分类和标注
     if output_dir:
         print(f"\n=== 生成标注图像 ===")
         annotated_image, classification_stats = annotate_characters(
-            image, merged_chars, narrow_width_threshold, 
+            image, filtered_chars, narrow_width_threshold, 
             mean_width, std_width, narrow_threshold_std_multiplier
         )
         
-        # 保存标注图像
+        # 根据是否使用VL评估决定保存位置
         base_name = os.path.splitext(os.path.basename(image_path))[0]
-        output_path = save_annotated_image(annotated_image, output_dir, f"{base_name}_annotated")
-        print(f"标注图像已保存: {output_path}")
         
-        # 保存图例
-        legend_image = create_legend_image()
-        legend_path = save_annotated_image(legend_image, output_dir, "legend")
-        print(f"图例已保存: {legend_path}")
+        if VL_CHARACTER_EVALUATION_CONFIG.get('enabled', False):
+            # VL评估模式：保存到VL标注目录
+            annotation_output_dir = os.path.join(VL_ANNOTATIONS_DIR, base_name)
+            os.makedirs(annotation_output_dir, exist_ok=True)
+            output_path = save_annotated_image(annotated_image, annotation_output_dir, f"{base_name}_vl_annotated")
+            legend_path = save_annotated_image(create_legend_image(), annotation_output_dir, "legend")
+            print(f"VL标注图像已保存: {output_path}")
+            print(f"图例已保存: {legend_path}")
+        else:
+            # 传统模式：保存到原始输出目录
+            output_path = save_annotated_image(annotated_image, output_dir, f"{base_name}_annotated")
+            legend_path = save_annotated_image(create_legend_image(), output_dir, "legend")
+            print(f"标注图像已保存: {output_path}")
+            print(f"图例已保存: {legend_path}")
         
         # 打印统计信息
         print_classification_stats(classification_stats, merge_stats)
     
-    return merged_chars, merge_stats
+    # 合并统计信息
+    final_stats = merge_stats.copy()
+    final_stats.update(vl_stats)
+    
+    return filtered_chars, final_stats
 
 
 def process_all_preprocessed_images(input_dir, output_dir):
@@ -194,10 +288,15 @@ def process_all_preprocessed_images(input_dir, output_dir):
         
         input_path = os.path.join(input_dir, filename)
         
+        # 为每个图像创建独立的输出目录
+        base_name = os.path.splitext(filename)[0]
+        image_output_dir = os.path.join(output_dir, base_name)
+        os.makedirs(image_output_dir, exist_ok=True)
+        
         try:
-            chars, merge_stats = segment_characters(input_path, output_dir)
+            chars, stats = segment_characters(input_path, image_output_dir)
             total_stats['total_characters'] += len(chars)
-            total_stats['total_merges'] += merge_stats['total_merges']
+            total_stats['total_merges'] += stats.get('total_merges', 0)
             
         except Exception as e:
             print(f"处理图像 {filename} 时出错: {str(e)}")

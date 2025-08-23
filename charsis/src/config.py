@@ -120,5 +120,20 @@ VL_CONFIG = {
     'confidence_estimation': True,     # 是否启用置信度估计
 }
 
-# VL模型输出目录
+# VL字符质量评估配置
+VL_CHARACTER_EVALUATION_CONFIG = {
+    'enabled': False,                  # 是否启用VL字符质量评估（测试简化方案）
+    'timeout': 60,                     # 单个字符评估超时时间（秒）
+    'batch_size': 5,                   # 批处理大小（避免API限制）
+    'rate_limit_delay': 1,             # 批次间延迟（秒）
+    'save_results': True,              # 是否保存评估结果
+    'filter_mode': 'vl',               # 过滤模式: 'vl', 'ocr', 'both'
+    'quality_threshold': ['GOOD'],     # 接受的质量等级
+    'max_tokens': 50,                  # 评估响应的最大token数
+}
+
+# VL模型相关目录
 VL_DIR = os.path.join(RESULTS_DIR, 'vl')
+VL_SEGMENTS_DIR = os.path.join(VL_DIR, 'segments')          # VL筛选后的分割结果
+VL_EVALUATIONS_DIR = os.path.join(VL_DIR, 'evaluations')    # VL评估结果文件
+VL_ANNOTATIONS_DIR = os.path.join(VL_DIR, 'annotations')    # VL标注图像

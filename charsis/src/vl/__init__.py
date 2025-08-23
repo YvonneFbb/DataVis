@@ -1,13 +1,15 @@
 """
-VL (Vision Language) 模块 - 使用视觉语言模型进行字符识别
-主要支持SiliconFlow API，提供Qwen2.5-VL、GLM-4.5V等多种视觉模型
+VL (Vision Language) 视觉语言模型模块
+
+专注于古籍文字识别，使用流式响应提升性能
+支持SiliconFlow API，提供Qwen2.5-VL等视觉模型
 """
 
-from .core import VLRecognizer, process_characters_with_vl
 from .providers import SiliconFlowVision
+from .text_recognition import VLTextRecognizer, recognize_image
 
 __all__ = [
-    'VLRecognizer',
-    'process_characters_with_vl',
-    'SiliconFlowVision'
+    'SiliconFlowVision',
+    'VLTextRecognizer', 
+    'recognize_image'
 ]
