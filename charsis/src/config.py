@@ -102,6 +102,14 @@ OCR_FILTER_CONFIG = {
     'batch_size': 50,                  # 批处理大小
 }
 
+# 远程 PaddleOCR 客户端配置（可由环境变量覆盖）
+OCR_REMOTE_CONFIG = {
+    # 优先读取环境变量 PPOCR_SERVER_URL，其次使用默认值
+    'server_url': os.environ.get('PPOCR_SERVER_URL', 'http://172.16.1.154:8000'),
+    # 超时时间（秒），可用 PPOCR_TIMEOUT 覆盖
+    'timeout': int(os.environ.get('PPOCR_TIMEOUT', '30')),
+}
+
 # VL (Vision Language) 模型配置
 VL_CONFIG = {
     'enabled': True,                   # 是否启用VL模型

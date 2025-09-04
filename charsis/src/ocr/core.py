@@ -16,10 +16,10 @@ from config import OCR_FILTER_CONFIG, SEGMENTS_DIR, OCR_DIR
 from utils.path import ensure_dir
 
 try:
-    from ocrmac import ocrmac
+    from .remote_paddleocr import RemotePaddleOCRClient
     OCR_AVAILABLE = True
 except ImportError:
-    print("警告: ocrmac 未安装或不可用。OCR功能将被禁用。")
+    print("警告: RemotePaddleOCRClient 未安装或不可用。OCR功能将被禁用。")
     OCR_AVAILABLE = False
 
 
@@ -79,24 +79,12 @@ def recognize_character_images(input_dir: str, output_dir: str, config: Dict[str
     char_files.sort()  # 按文件名排序
     print(f"找到 {len(char_files)} 个字符图片文件")
     
-    # 初始化OCR引擎
-    framework = config.get('framework', 'accurate')
-    language = config.get('language_preference', ['zh-Hans', 'zh-Hant'])
-    
+    # 初始化远程PaddleOCR客户端
     try:
-        if framework == 'livetext':
-            ocr_engine = lambda img: ocrmac.livetext_from_image(
-                img, language_preference=language
-            ).recognize()
-        else:
-            ocr_engine = lambda img: ocrmac.OCR(
-                img, 
-                language_preference=language,
-                recognition_level=framework
-            ).recognize()
-        print(f"OCR引擎初始化成功: {framework} 模式")
+        ocr_client = RemotePaddleOCRClient()
+        print(f"远程PaddleOCR客户端初始化成功")
     except Exception as e:
-        print(f"OCR引擎初始化失败: {e}")
+        print(f"远程PaddleOCR客户端初始化失败: {e}")
         return {'error': str(e)}
     
     # 统计信息
@@ -121,31 +109,19 @@ def recognize_character_images(input_dir: str, output_dir: str, config: Dict[str
         input_path = os.path.join(input_dir, filename)
         
         try:
-            # 读取图片
-            image = cv2.imread(input_path)
-            if image is None:
-                print(f"无法读取图片: {filename}")
-                stats['error'] += 1
-                continue
+            from pathlib import Path
             
-            # 转换为PIL图片
-            if len(image.shape) == 3:
-                pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-            else:
-                pil_image = Image.fromarray(image)
-            
-            # OCR识别
-            results = ocr_engine(pil_image)
+            # 使用远程PaddleOCR识别
+            result = ocr_client.predict_single_character(Path(input_path))
             
             # 处理识别结果
-            recognized_text = ""
-            confidence = 0.0
-            
-            if results:
-                # 取置信度最高的结果
-                best_result = max(results, key=lambda x: x[1])
-                recognized_text = best_result[0].strip()
-                confidence = best_result[1]
+            if result['success']:
+                recognized_text = result['text']
+                confidence = result['confidence']
+            else:
+                recognized_text = ""
+                confidence = 0.0
+                print(f"OCR识别失败: {filename} - {result.get('message', '未知错误')}")
             
             # 记录OCR结果
             ocr_result = {
@@ -177,9 +153,21 @@ def recognize_character_images(input_dir: str, output_dir: str, config: Dict[str
                 stats['recognized'] += 1
                 ocr_result['status'] = 'recognized'
             
-            # 复制文件到输出目录
+            # 保存或复制字符图像到输出目录
             output_path = os.path.join(output_dir, output_filename)
-            cv2.imwrite(output_path, image)
+            try:
+                # 直接读取输入并写出，避免未定义变量
+                img_to_save = cv2.imread(input_path)
+                if img_to_save is None:
+                    # 读失败则回退为文件复制
+                    import shutil
+                    shutil.copy2(input_path, output_path)
+                else:
+                    cv2.imwrite(output_path, img_to_save)
+            except Exception:
+                # 最终兜底复制
+                import shutil
+                shutil.copy2(input_path, output_path)
             
             ocr_result['output_file'] = output_filename
             ocr_results.append(ocr_result)
