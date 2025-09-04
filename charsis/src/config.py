@@ -14,6 +14,9 @@ SEGMENTS_DIR = os.path.join(RESULTS_DIR, 'segments')
 OCR_DIR = os.path.join(RESULTS_DIR, 'ocr')
 ANALYSIS_DIR = os.path.join(RESULTS_DIR, 'analysis')
 
+# 预OCR（文本区域检测）目录
+PREOCR_DIR = os.path.join(RESULTS_DIR, 'preocr')
+
 # ==================== 字符分割配置参数 ====================
 
 # 异常值检测参数
@@ -56,6 +59,26 @@ PROJECTION_CONFIG = {
     'boundary_exclusion_ratio': 0.1,  # 边界排除比例
     'validation_min_segment_ratio': 0.3, # 验证最小段长度比例
     'max_splits_limit': 5,            # 最大分割数限制
+}
+
+# 分割细化与对齐（动态 seam + 期望数量对齐）
+SEGMENT_REFINEMENT_CONFIG = {
+    # 是否启用动态 seam 切割（在初步分割的谷线附近寻找一条“避开笔画”的最小代价路径来切割）
+    'enable_dynamic_seam': True,
+    # seam 搜索带宽（相对于估计单字高度的比例；例如 0.3 表示在 ±0.3H 的窗口内搜索路径）
+    'seam_band_ratio': 0.3,
+    # seam 代价权重：越小越偏好路径通过该特征
+    'seam_ink_weight': 1.0,   # 墨迹（前景）代价
+    'seam_dist_weight': 0.5,  # 距离前景越远越好（使用背景距前景的DT）
+    'seam_grad_weight': 0.2,  # 图像梯度，惩罚切过强边缘
+    # 期望数量对齐（利用外部提供的期望字数进行轻量 split/merge 调整）
+    'expected_count_alignment': True,
+    # 允许的最小分段高度（相对整图高度），避免产生过薄的小碎片
+    'min_segment_height_ratio': 0.25,
+    'max_split_attempts': 3,
+    'max_merge_attempts': 3,
+    # 调试叠加绘制
+    'debug_overlay': True,
 }
 
 # 红红合并参数

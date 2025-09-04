@@ -1,6 +1,6 @@
 # Segmentation (Recreated)
 
-This module provides a robust vertical single-column segmentation tuned for OCR region images (e.g., `data/results/ocr/demo/region_images/region_001.jpg`).
+This module provides a robust vertical single-column segmentation tuned for preOCR region images (e.g., `data/results/preocr/demo/region_images/region_001.jpg`).
 
 - `vertical_hybrid.py`: main implementation and a CLI for quick testing.
 

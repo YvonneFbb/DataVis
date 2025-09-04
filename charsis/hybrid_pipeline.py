@@ -16,7 +16,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from preprocess.core import preprocess_image
-from ocr.remote_paddleocr import RemotePaddleOCRClient
+from preocr.remote_paddleocr import RemotePaddleOCRClient
 from utils.path import ensure_dir
 
 def create_pipeline_structure(base_name: str) -> Dict[str, Path]:
@@ -25,9 +25,9 @@ def create_pipeline_structure(base_name: str) -> Dict[str, Path]:
     
     structure = {
         'preprocessed': base_path / "preprocessed" / base_name,
-        'ocr': base_path / "ocr" / base_name,
+        'preocr': base_path / "preocr" / base_name,
         'segments': base_path / "segments" / base_name,
-        'ocr_regions': base_path / "ocr" / base_name / "region_images",
+        'ocr_regions': base_path / "preocr" / base_name / "region_images",
         'segments_summary': base_path / "segments" / base_name / "all_characters"
     }
     
@@ -172,7 +172,7 @@ def step2_ocr_regions(input_path: Path, output_dir: Path, regions_dir: Path) -> 
         
         # 创建标注图像
         annotated_image = original_image.copy()
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
         
         pil_image = Image.fromarray(cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(pil_image)
@@ -182,12 +182,9 @@ def step2_ocr_regions(input_path: Path, output_dir: Path, regions_dir: Path) -> 
         for i, region_info in enumerate(region_info_list):
             color = colors[i % len(colors)]
             bbox = region_info['rect_bbox']
-            
-            # 绘制边界框
+            # 绘制边界框与ID
             draw.rectangle(bbox, outline=color, width=3)
-            
-            # 绘制区域ID
-            draw.text((bbox[0], bbox[1]-25), f"R{i+1}", fill=color)
+            draw.text((bbox[0], max(0, bbox[1]-25)), f"R{i+1}", fill=color)
         
         # 保存标注图像
         annotated_path = output_dir / "annotated.jpg"
@@ -225,8 +222,7 @@ def step3_character_segmentation(regions_data: Dict[str, Any], regions_dir: Path
     start_time = time.time()
     
     try:
-        from segmentation.vertical_hybrid_segmentation import segment_vertical_column_hybrid
-        from segmentation.morphology_segmentation import segment_vertical_column_morphology
+        from segmentation.vertical_hybrid import run_on_image as segment_single
         
         total_characters = 0
         all_character_info = []
@@ -240,21 +236,11 @@ def step3_character_segmentation(regions_data: Dict[str, Any], regions_dir: Path
             ensure_dir(str(region_output_dir))
             
             print(f"\n处理区域 {region_id}: {region_info['text'][:30]}...")
-            
-            # 优先使用Hybrid切割；失败则回退到形态学
-            segment_result = segment_vertical_column_hybrid(
+            segment_result = segment_single(
                 str(region_path),
                 str(region_output_dir),
-                region_info,
-                debug=True
+                expected_text=region_info.get('text', None)
             )
-            if not (segment_result and segment_result.get('success') and segment_result.get('character_count', 0) > 0):
-                print("   Hybrid切割结果不理想，回退到形态学方法…")
-                segment_result = segment_vertical_column_morphology(
-                    str(region_path),
-                    str(region_output_dir),
-                    region_info
-                )
             
             # segment_vertical_column 返回 dict 格式
             if segment_result and segment_result.get('success'):
@@ -264,12 +250,15 @@ def step3_character_segmentation(regions_data: Dict[str, Any], regions_dir: Path
                 # 从分割结果中获取字符信息
                 region_chars = []
                 for i, char_data in enumerate(segment_result['characters']):
+                    (x, y, w, h) = (
+                        char_data['bbox'][0], char_data['bbox'][1], char_data['bbox'][2], char_data['bbox'][3]
+                    ) if 'bbox' in char_data else (0, 0, 0, 0)
                     char_info = {
                         'char_id': f"{region_id}_char_{i+1:03d}",
                         'local_file': char_data['filename'],
                         'region_id': region_id,
-                        'height': char_data['height'],
-                        'width': char_data.get('width', 0),
+                        'height': h,
+                        'width': w,
                         'original_bbox': char_data.get('original_bbox', (0, 0, 0, 0)),
                         'refined_bbox': char_data.get('refined_bbox', (0, 0, 0, 0))
                     }
@@ -282,8 +271,8 @@ def step3_character_segmentation(regions_data: Dict[str, Any], regions_dir: Path
                     'characters': region_chars,
                     'ocr_text': region_info['text'],
                     'confidence': region_info['confidence'],
-                    'method': segment_result.get('method', 'morphology_only'),
-                    'refinement_stats': segment_result.get('refinement_stats', {})
+                    'method': 'vertical_hybrid',
+                    'refinement_stats': segment_result.get('stats', {})
                 })
                 
                 method_info = segment_result.get('method', 'unknown')
@@ -424,7 +413,7 @@ def run_hybrid_pipeline(input_image: str = "data/raw/demo.jpg",
     
     # 步骤2: OCR区域检测
     if not skip_ocr:
-        step2_result = step2_ocr_regions(enhanced_path, dirs['ocr'], dirs['ocr_regions'])
+    step2_result = step2_ocr_regions(enhanced_path, dirs['preocr'], dirs['ocr_regions'])
         results['step2'] = step2_result
         
         if not step2_result['success']:
@@ -432,7 +421,7 @@ def run_hybrid_pipeline(input_image: str = "data/raw/demo.jpg",
     else:
         print(f"\n⏭️ 跳过步骤2: OCR区域检测")
         # 加载现有的OCR结果
-        regions_json_path = dirs['ocr'] / "regions.json"
+    regions_json_path = dirs['preocr'] / "regions.json"
         if not regions_json_path.exists():
             return {'success': False, 'failed_at': 'step2', 'error': f'未找到OCR结果文件: {regions_json_path}'}
         

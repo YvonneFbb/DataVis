@@ -2,6 +2,7 @@ import cv2
 import os
 import numpy as np
 import sys
+import argparse
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import RAW_DIR, PREPROCESSED_DIR
 from utils.path import ensure_dir, get_output_path
@@ -105,18 +106,39 @@ def process_all_raw_images(input_dir=None, output_dir=None, alpha=1.5, beta=10):
     return success_count, len(image_files)
 
 if __name__ == '__main__':
-    # --- 可调整参数 ---
-    ALPHA = 1.5  # 对比度 (建议范围: 1.0 ~ 3.0)
-    BETA = 10    # 亮度 (建议范围: 0 ~ 100)
-    # --------------------
+    parser = argparse.ArgumentParser(description='Preprocess ancient book images (single image or batch)')
+    parser.add_argument('--image', help='单张图片路径，若提供则处理该图片；未提供时默认批处理目录')
+    parser.add_argument('--input-dir', help='批处理输入目录，默认使用 RAW_DIR')
+    parser.add_argument('--output-dir', help='输出目录，默认使用 PREPROCESSED_DIR')
+    parser.add_argument('--alpha', type=float, default=1.5, help='对比度控制 (1.0-3.0)')
+    parser.add_argument('--beta', type=float, default=10, help='亮度控制 (0-100)')
+    args = parser.parse_args()
 
-    # 批量处理raw目录下的所有图片
-    success_count, total_count = process_all_raw_images(alpha=ALPHA, beta=BETA)
-    
-    if total_count == 0:
-        print("\n没有找到可处理的图片文件。")
-        print("请确保在 data/raw/ 目录中放置图片文件（支持格式：jpg, jpeg, png, bmp, tiff）")
-    elif success_count == total_count:
-        print(f"\n✓ 所有 {total_count} 个图片文件处理成功！")
+    if args.image:
+        # 单图处理
+        in_path = args.image
+        out_dir = args.output_dir or PREPROCESSED_DIR
+        os.makedirs(out_dir, exist_ok=True)
+        base, ext = os.path.splitext(os.path.basename(in_path))
+        out_name = f"{base}_preprocessed_alpha{args.alpha}_beta{args.beta}{ext}"
+        out_path = os.path.join(out_dir, out_name)
+        ok = preprocess_image(in_path, out_path, alpha=args.alpha, beta=args.beta)
+        if ok:
+            print(f"✓ 单图处理完成: {out_path}")
+        else:
+            print("⚠ 单图处理失败")
     else:
-        print(f"\n⚠ 部分文件处理失败：{success_count}/{total_count} 成功")
+        # 批处理
+        success_count, total_count = process_all_raw_images(
+            input_dir=args.input_dir or RAW_DIR,
+            output_dir=args.output_dir or PREPROCESSED_DIR,
+            alpha=args.alpha,
+            beta=args.beta,
+        )
+        if total_count == 0:
+            print("\n没有找到可处理的图片文件。")
+            print("请确保在 data/raw/ 目录中放置图片文件（支持格式：jpg, jpeg, png, bmp, tiff）")
+        elif success_count == total_count:
+            print(f"\n✓ 所有 {total_count} 个图片文件处理成功！")
+        else:
+            print(f"\n⚠ 部分文件处理失败：{success_count}/{total_count} 成功")

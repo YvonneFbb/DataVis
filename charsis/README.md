@@ -10,16 +10,18 @@ charsis/
 │   ├── raw/                # 存放原始输入图片
 │   └── results/            # 统一的结果输出目录
 │       ├── preprocessed/   # 预处理结果
-│       ├── segments/       # 文字切割结果
-│       ├── ocr/            # OCR识别结果
+    │       ├── segments/       # 文字切割结果
+    │       ├── preocr/         # 文本区域检测（区域框/region图等）
+    │       ├── ocr/            # 字符识别结果（保留目录名用于兼容）
 │       └── analysis/       # 分析结果
 ├── notebooks/              # 用于探索性数据分析的 Jupyter Notebooks
 ├── src/
 │   ├── __init__.py
 │   ├── config.py          # 配置文件
 │   ├── preprocess/         # 图像预处理模块
-│   ├── segmentation/       # 文字切割模块
-│   ├── ocr/                # 文字识别模块
+    │   ├── segmentation/       # 文字切割模块
+    │   ├── preocr/             # 文本区域检测（远程 PaddleOCR 客户端等）
+    │   ├── postocr/            # 分割后字符识别与重命名
 │   ├── analysis/           # 数据分析模块
 │   └── utils/             # 通用工具
 ├── tests/                  # 存放单元测试
