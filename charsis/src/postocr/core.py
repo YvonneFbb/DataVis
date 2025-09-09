@@ -21,7 +21,7 @@ except Exception as e:
     raise RuntimeError(
         f"无法导入 src.config（OCR_FILTER_CONFIG/SEGMENTS_DIR/OCR_DIR）。请从仓库根运行或设置 PYTHONPATH。原始错误: {e}"
     )
-from utils.path import ensure_dir
+from src.utils.path import ensure_dir
 
 try:
     # 远程客户端位于 preocr 阶段

@@ -13,7 +13,7 @@ except Exception as e:
     raise RuntimeError(
         f"无法导入 src.config（RAW_DIR/PREPROCESSED_DIR 等）。请从仓库根运行或设置 PYTHONPATH。原始错误: {e}"
     )
-from utils.path import ensure_dir, get_output_path
+from src.utils.path import ensure_dir, get_output_path
 
 def _keep_large_components(mask: np.ndarray, min_area: int = 6) -> np.ndarray:
     """Keep only connected components with area >= min_area in a binary mask."""

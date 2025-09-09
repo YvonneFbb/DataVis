@@ -12,7 +12,7 @@ from pathlib import Path
 # 添加父目录到系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import VL_CONFIG, VL_EVALUATIONS_DIR
-from utils.path import ensure_dir
+from src.utils.path import ensure_dir
 from vl.providers import SiliconFlowVision
 
 

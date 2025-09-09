@@ -21,7 +21,7 @@ except Exception as e:
     raise RuntimeError(
         f"无法导入 src.config（SEGMENTS_DIR/PREOCR_DIR/OCR_REMOTE_CONFIG）。请从仓库根运行或设置 PYTHONPATH。原始错误: {e}"
     )
-from utils.path import ensure_dir
+from src.utils.path import ensure_dir
 
 
 class RemotePaddleOCRClient:
@@ -39,7 +39,7 @@ class RemotePaddleOCRClient:
             response = self.session.get(f"{self.server_url}/health", timeout=5)
             if response.status_code == 200:
                 health = response.json()
-                print(f"✅ PaddleOCR服务连接成功")
+                print(f"PaddleOCR服务连接成功")
                 print(f"   状态: {health.get('status', 'unknown')}")
                 print(f"   GPU可用: {health.get('gpu_available', False)}")
                 return True
