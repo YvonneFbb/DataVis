@@ -10,9 +10,17 @@ from collections import defaultdict
 from PIL import Image
 from typing import List, Tuple, Dict, Any, Optional
 
-# 添加父目录到系统路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import OCR_FILTER_CONFIG, SEGMENTS_DIR, OCR_DIR
+# 确保从仓库根导入 src.config
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+try:
+    from src.config import OCR_FILTER_CONFIG, SEGMENTS_DIR, OCR_DIR
+except Exception as e:
+    raise RuntimeError(
+        f"无法导入 src.config（OCR_FILTER_CONFIG/SEGMENTS_DIR/OCR_DIR）。请从仓库根运行或设置 PYTHONPATH。原始错误: {e}"
+    )
 from utils.path import ensure_dir
 
 try:

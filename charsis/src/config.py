@@ -1,72 +1,77 @@
+"""Unified project configuration (整理版)
+
+层次结构:
+1. 路径路径 / 目录
+2. 环境变量读取辅助 (_env, _env_int)
+3. 预处理配置 (断笔修补 / 墨色保持)
+4. 分割细化配置
+5. OCR 过滤 & 远程服务
+6. VL 相关配置与目录
+7. 裁边 / 噪点清理
+8. 校验与摘要工具
+
+注意：外部模块引用的变量名称保持不变，避免破坏现有 import。
+"""
+
 import os
+from typing import Dict, Any
 
-# 项目根目录
+# ==================== 1. 路径 / 目录 ====================
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# 数据目录
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 RAW_DIR = os.path.join(DATA_DIR, 'raw')
-
-# 结果目录
 RESULTS_DIR = os.path.join(DATA_DIR, 'results')
 PREPROCESSED_DIR = os.path.join(RESULTS_DIR, 'preprocessed')
 SEGMENTS_DIR = os.path.join(RESULTS_DIR, 'segments')
 OCR_DIR = os.path.join(RESULTS_DIR, 'ocr')
 ANALYSIS_DIR = os.path.join(RESULTS_DIR, 'analysis')
+PREOCR_DIR = os.path.join(RESULTS_DIR, 'preocr')  # 预OCR（文本区域检测）目录
 
-# 预OCR（文本区域检测）目录
-PREOCR_DIR = os.path.join(RESULTS_DIR, 'preocr')
+# ==================== 2. 环境变量辅助 ====================
+def _env(name: str, default: str | None = None) -> str | None:
+    return os.environ.get(name, default)
 
-# ==================== 字符分割配置参数 ====================
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except Exception:
+        return default
 
-# 异常值检测参数
-IQR_MULTIPLIER = 1.5  # IQR异常值检测倍数
-
-# 纵向连接字符检测参数
-VERTICAL_CHAR_CONFIG = {
-    'height_multiplier': 1.2,      # 高度至少是平均高度的倍数（进一步降低）
-    'aspect_ratio_threshold': 1.5,  # 高宽比阈值（进一步降低）
-    'min_width_ratio': 0.1,        # 最小宽度比例（进一步降低）
+# ==================== 预处理：断笔/小缺口修补（可选） ====================
+# 在送入 OCR 与分割前，对灰度图进行“逆向闭运算”来弥合细小裂缝/断笔，
+# 有助于后续自适应阈值时保持连贯的笔画结构。
+PREPROCESS_STROKE_HEAL_CONFIG = {
+    'enabled': False,            # 默认关闭，避免影响现有效果；需要时再开启
+    'kernel': 3,                 # 结构元素的基准尺寸（像素，建议 3 或 5）
+    'iterations': 1,             # 闭运算迭代次数
+    # 方向：iso(各向同性圆核)、h(水平)、v(垂直)、d1(↘ 对角)、d2(↙ 对角)
+    'directions': ['iso', 'h', 'v'],
+    # 可选：在闭运算前做一点双边滤波，平滑纸张纹理、保留边缘
+    'bilateral_denoise': False,
+    'bilateral': {
+        'd': 5,
+        'sigmaColor': 30,
+        'sigmaSpace': 15,
+    },
 }
 
-# 过宽字符检测参数
-WIDE_CHAR_CONFIG = {
-    'width_multiplier': 1.5,       # 宽度至少是平均宽度的倍数
-    'min_height_ratio': 0.4,       # 最小高度比例（相对于平均高度）
-    'max_width_height_ratio': 6.0,  # 最大宽高比
+# ==================== 预处理：墨色保持/增强（避免变淡） ====================
+# 在整体亮度提增后，对文字墨迹进行“回墨”处理，避免笔画显得发灰变淡。
+PREPROCESS_INK_PRESERVE_CONFIG = {
+    'enabled': True,        # 默认开启，尽量避免整体变淡
+    'blackhat_kernel': 9,   # 黑帽核尺寸（奇数，建议 7/9/11）
+    'blackhat_strength': 0.6,  # 回墨强度（0~1）
+    'unsharp_amount': 0.2,  # 反锐化增强边缘的权重（0 关闭）
 }
 
-# 字符重分类参数
-RECLASSIFY_CONFIG = {
-    'narrow_threshold': 0.6,       # 窄字符宽度比例阈值
-    'wide_threshold': 1.5,         # 宽字符宽度比例阈值
-}
-
-# 投影分析参数 - v2.0版本
-PROJECTION_CONFIG = {
-    # 基础分割验证参数
-    'min_segment_height_ratio': 0.4,  # 最小分割高度比例
-    'min_segment_width_ratio': 0.4,   # 最小分割宽度比例
-    'min_final_height_ratio': 0.3,   # 最终最小高度比例
-    
-    # v2.0改进算法参数
-    'gaussian_sigma_ratio': 20,       # 高斯核标准差比例 (sigma = mean_size / ratio)
-    'adaptive_percentile_low': 25,    # 自适应阈值低分位数
-    'adaptive_percentile_high': 75,   # 自适应阈值高分位数
-    'adaptive_threshold_offset': 0.2, # 自适应阈值偏移系数
-    'valley_min_distance_ratio': 4,   # 谷值最小间距比例 (distance = mean_size / ratio)
-    'valley_prominence': 0.1,         # 谷值显著性阈值
-    'boundary_exclusion_ratio': 0.1,  # 边界排除比例
-    'validation_min_segment_ratio': 0.3, # 验证最小段长度比例
-    'max_splits_limit': 5,            # 最大分割数限制
-}
+# ==================== 分割细化与对齐（当前实现使用） ====================
 
 # 分割细化与对齐（动态 seam + 期望数量对齐）
 SEGMENT_REFINEMENT_CONFIG = {
     # 是否启用动态 seam 切割（在初步分割的谷线附近寻找一条“避开笔画”的最小代价路径来切割）
     'enable_dynamic_seam': True,
     # seam 搜索带宽（相对于估计单字高度的比例；例如 0.3 表示在 ±0.3H 的窗口内搜索路径）
-    'seam_band_ratio': 0.3,
+    'seam_band_ratio': 0.1,
     # seam 代价权重：越小越偏好路径通过该特征
     'seam_ink_weight': 1.0,   # 墨迹（前景）代价
     'seam_dist_weight': 0.5,  # 距离前景越远越好（使用背景距前景的DT）
@@ -81,35 +86,9 @@ SEGMENT_REFINEMENT_CONFIG = {
     'debug_overlay': True,
 }
 
-# 红红合并参数
-RED_RED_MERGE_CONFIG = {
-    'max_horizontal_distance': 1.5,    # 最大水平距离倍数（相对于参考宽度）
-    'min_vertical_overlap_ratio': 0.3,  # 最小垂直重叠比例
-    'width_ratio_range': (0.5, 2.5),   # 合并后宽度比例范围
-    'height_ratio_range': (0.5, 3.0),  # 合并后高度比例范围
-    'wide_char_multiplier': 2,          # 过宽字符判断倍数
-    'wide_char_ratio': 0.3,            # 过宽字符比例
-    'max_rounds': 10,                  # 最大合并轮数
-}
-
-# 红绿合并参数
-RED_GREEN_MERGE_CONFIG = {
-    'max_horizontal_distance': 2.0,    # 最大水平距离倍数（相对于参考宽度）
-    'min_vertical_overlap_ratio': 0.3,  # 最小垂直重叠比例
-    'width_ratio_range': (0.5, 3.5),   # 合并后宽度比例范围
-    'height_ratio_range': (0.4, 3.5),  # 合并后高度比例范围
-    'wide_char_multiplier': 2,          # 过宽字符判断倍数
-    'wide_char_ratio': 0.3,            # 过宽字符比例
-}
-
-# 字符分类配置
-CHAR_CLASSIFICATION_CONFIG = {
-    'narrow_threshold_std_multiplier': 1.0,  # 窄字符判断的标准差倍数
-    'binary_threshold': 128,  # 二值化阈值
-    'dilation_kernel_size': 3,  # 膨胀操作核大小
-    'min_char_size': 10,  # 最小字符尺寸阈值
-    'dilation_iterations': 2,  # 膨胀操作迭代次数
-}
+#（以下 legacy 配置已移除：IQR_MULTIPLIER、VERTICAL_CHAR_CONFIG、WIDE_CHAR_CONFIG、
+# RECLASSIFY_CONFIG、PROJECTION_CONFIG、RED_RED_MERGE_CONFIG、RED_GREEN_MERGE_CONFIG、
+# CHAR_CLASSIFICATION_CONFIG。如需回退旧算法，可从版本历史中恢复。）
 
 # OCR过滤配置
 OCR_FILTER_CONFIG = {
@@ -127,10 +106,8 @@ OCR_FILTER_CONFIG = {
 
 # 远程 PaddleOCR 客户端配置（可由环境变量覆盖）
 OCR_REMOTE_CONFIG = {
-    # 优先读取环境变量 PPOCR_SERVER_URL，其次使用默认值
-    'server_url': os.environ.get('PPOCR_SERVER_URL', 'http://172.16.1.154:8000'),
-    # 超时时间（秒），可用 PPOCR_TIMEOUT 覆盖
-    'timeout': int(os.environ.get('PPOCR_TIMEOUT', '30')),
+    'server_url': _env('PPOCR_SERVER_URL', 'http://172.16.1.154:8000'),
+    'timeout': _env_int('PPOCR_TIMEOUT', 30),
 }
 
 # VL (Vision Language) 模型配置
@@ -168,3 +145,96 @@ VL_DIR = os.path.join(RESULTS_DIR, 'vl')
 VL_SEGMENTS_DIR = os.path.join(VL_DIR, 'segments')          # VL筛选后的分割结果
 VL_EVALUATIONS_DIR = os.path.join(VL_DIR, 'evaluations')    # VL评估结果文件
 VL_ANNOTATIONS_DIR = os.path.join(VL_DIR, 'annotations')    # VL标注图像
+
+# ==================== 字符切片裁边配置 ====================
+# 对分割出的单字图进行内容裁边与统一留白，提升可视化与后续识别效果
+CHAR_CROP_CONFIG = {
+    'enabled': True,          # 是否启用内容裁边
+    'mode': 'content',        # 'content' 或 'margin_only'
+    'pad': 2,                 # 裁后再扩展的像素
+    'final_padding': 0,       # 统一额外边距
+    'square_output': False,   # 是否填充成正方形
+    'min_fg_area': 8,         # 最小前景面积阈值
+    'binarize': 'otsu',       # 'otsu' | 'adaptive'
+}
+
+# ==================== 单字噪点清理配置 ====================
+# 在切片上执行连通域过滤，移除小墨点/残片；默认保留最大或最居中的主要前景
+CHAR_NOISE_CLEAN_CONFIG = {
+    'enabled': False,
+    'min_area': 10,
+    'min_area_ratio': 0.002,
+    'keep_largest': True,
+    'center_bias': 0.001,
+    'second_keep_ratio': 0.35,
+    'morph_open': 0,
+    'morph_close': 0,
+}
+
+# ==================== 8. 校验与摘要工具 ====================
+def validate_config() -> None:
+    mode = CHAR_CROP_CONFIG.get('mode')
+    if mode not in ('content', 'margin_only'):
+        raise ValueError(f"CHAR_CROP_CONFIG.mode 非法: {mode}")
+    if CHAR_CROP_CONFIG.get('pad', 0) < 0:
+        raise ValueError("CHAR_CROP_CONFIG.pad 不能为负数")
+    if CHAR_NOISE_CLEAN_CONFIG.get('min_area', 1) < 0:
+        raise ValueError("CHAR_NOISE_CLEAN_CONFIG.min_area 不能为负数")
+    if SEGMENT_REFINEMENT_CONFIG.get('seam_band_ratio', 0.1) <= 0:
+        raise ValueError("SEGMENT_REFINEMENT_CONFIG.seam_band_ratio 应 > 0")
+
+def config_summary(compact: bool = True) -> Dict[str, Any]:
+    summary = {
+        'paths': {
+            'PROJECT_ROOT': PROJECT_ROOT,
+            'DATA_DIR': DATA_DIR,
+            'RESULTS_DIR': RESULTS_DIR,
+        },
+        'preprocess': {
+            'stroke_heal_enabled': PREPROCESS_STROKE_HEAL_CONFIG.get('enabled'),
+            'ink_preserve_enabled': PREPROCESS_INK_PRESERVE_CONFIG.get('enabled'),
+        },
+        'segmentation': {
+            'dynamic_seam': SEGMENT_REFINEMENT_CONFIG.get('enable_dynamic_seam'),
+            'expected_count_alignment': SEGMENT_REFINEMENT_CONFIG.get('expected_count_alignment'),
+        },
+        'crop': {
+            'enabled': CHAR_CROP_CONFIG.get('enabled'),
+            'mode': CHAR_CROP_CONFIG.get('mode'),
+            'pad': CHAR_CROP_CONFIG.get('pad'),
+        },
+        'noise_clean': {
+            'enabled': CHAR_NOISE_CLEAN_CONFIG.get('enabled'),
+            'min_area': CHAR_NOISE_CLEAN_CONFIG.get('min_area'),
+        },
+        'ocr_remote': {
+            'server_url': OCR_REMOTE_CONFIG.get('server_url'),
+            'timeout': OCR_REMOTE_CONFIG.get('timeout'),
+        },
+        'vl': {
+            'enabled': VL_CONFIG.get('enabled'),
+            'model': VL_CONFIG.get('model'),
+        }
+    }
+    if compact:
+        return summary
+    return {
+        'PREPROCESS_STROKE_HEAL_CONFIG': PREPROCESS_STROKE_HEAL_CONFIG,
+        'PREPROCESS_INK_PRESERVE_CONFIG': PREPROCESS_INK_PRESERVE_CONFIG,
+        'SEGMENT_REFINEMENT_CONFIG': SEGMENT_REFINEMENT_CONFIG,
+        'CHAR_CROP_CONFIG': CHAR_CROP_CONFIG,
+        'CHAR_NOISE_CLEAN_CONFIG': CHAR_NOISE_CLEAN_CONFIG,
+        'OCR_FILTER_CONFIG': OCR_FILTER_CONFIG,
+        'OCR_REMOTE_CONFIG': OCR_REMOTE_CONFIG,
+        'VL_CONFIG': VL_CONFIG,
+        'VL_CHARACTER_EVALUATION_CONFIG': VL_CHARACTER_EVALUATION_CONFIG,
+    }
+
+__all__ = [
+    'PROJECT_ROOT','DATA_DIR','RAW_DIR','RESULTS_DIR','PREPROCESSED_DIR','SEGMENTS_DIR','OCR_DIR','ANALYSIS_DIR','PREOCR_DIR',
+    'PREPROCESS_STROKE_HEAL_CONFIG','PREPROCESS_INK_PRESERVE_CONFIG',
+    'SEGMENT_REFINEMENT_CONFIG','CHAR_CROP_CONFIG','CHAR_NOISE_CLEAN_CONFIG',
+    'OCR_FILTER_CONFIG','OCR_REMOTE_CONFIG',
+    'VL_CONFIG','VL_CHARACTER_EVALUATION_CONFIG',
+    'validate_config','config_summary'
+]

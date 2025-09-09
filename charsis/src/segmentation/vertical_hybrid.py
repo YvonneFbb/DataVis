@@ -6,6 +6,7 @@ Designed and tuned for data/results/preocr/demo/region_images/region_001.jpg.
 from __future__ import annotations
 
 import os
+import sys
 from typing import List, Tuple, Dict, Any
 
 import cv2
@@ -14,28 +15,21 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d, distance_transform_edt
 from scipy.signal import find_peaks
 
-# Local config
+"""Fail-fast config import and stable sys.path setup"""
+# Ensure repository root (the folder that contains the 'src' package) is importable
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# Strict import: do not silently fallback
 try:
     from src.config import SEGMENT_REFINEMENT_CONFIG, PREOCR_DIR, SEGMENTS_DIR
-except Exception:
-    SEGMENT_REFINEMENT_CONFIG = {
-        'enable_dynamic_seam': True,
-        'seam_band_ratio': 0.3,
-        'seam_ink_weight': 1.0,
-        'seam_dist_weight': 0.5,
-        'seam_grad_weight': 0.2,
-        'expected_count_alignment': True,
-        'min_segment_height_ratio': 0.25,
-        'max_split_attempts': 3,
-        'max_merge_attempts': 3,
-        'debug_overlay': True,
-    }
-    # Fallback paths relative to repo
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
-    RESULTS_DIR = os.path.join(DATA_DIR, 'results')
-    PREOCR_DIR = os.path.join(RESULTS_DIR, 'preocr')
-    SEGMENTS_DIR = os.path.join(RESULTS_DIR, 'segments')
+except Exception as e:
+    raise RuntimeError(
+        f"无法导入 src.config（SEGMENT_REFINEMENT_CONFIG/PREOCR_DIR/SEGMENTS_DIR）。\n"
+        f"请从仓库根目录运行或将仓库根目录加入 PYTHONPATH。原始错误: {e}"
+    )
 
 
 def _to_gray(img: np.ndarray) -> np.ndarray:
@@ -339,9 +333,9 @@ def segment_vertical_single_column(image: np.ndarray,
         boxes.append((x1 + xx, y1c, min(x2 - x1, ww), y2c - y1c))
 
     stats = {
-        'angle': angle,
-        'segments': len(boxes),
-        'x_crop': (x1, x2)
+        'angle': float(angle),
+        'segments': int(len(boxes)),
+        'x_crop': (int(x1), int(x2)),
     }
 
     # Prepare overlay seams (global coordinates) for drawing
@@ -359,7 +353,8 @@ def segment_vertical_single_column(image: np.ndarray,
 
 def run_on_image(image_path: str, output_dir: str, expected_text: str | None = None,
                  enable_dynamic_seam: bool | None = None,
-                 align_expected_count: bool | None = None) -> Dict[str, Any]:
+                 align_expected_count: bool | None = None,
+                 crop_mode_override: str | None = None) -> Dict[str, Any]:
     img = cv2.imread(image_path)
     if img is None:
         return {'success': False, 'error': f'cannot read: {image_path}'}
@@ -372,10 +367,152 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
         align_expected_count=align_expected_count,
     )
 
+    # optional tight-crop for each char chip
+    try:
+        from src.config import CHAR_CROP_CONFIG, CHAR_NOISE_CLEAN_CONFIG
+    except Exception as e:
+        raise RuntimeError(
+            f"无法从 src.config 导入 CHAR_CROP_CONFIG/CHAR_NOISE_CLEAN_CONFIG。\n"
+            f"请确认 src 包与配置文件可被导入。原始错误: {e}"
+        )
+
+    effective_crop_mode = str(crop_mode_override) if crop_mode_override else str(CHAR_CROP_CONFIG.get('mode', 'content'))
+
+    def _tight_crop(bgr: np.ndarray) -> np.ndarray:
+        if not CHAR_CROP_CONFIG.get('enabled', True):
+            return bgr
+        gray = bgr[:, :, 0] if bgr.ndim == 3 and bgr.shape[2] == 1 else (cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) if bgr.ndim == 3 else bgr)
+
+        # margin-only: only trim surrounding white borders, no morphology or CC filtering
+        if effective_crop_mode == 'margin_only':
+            thr = 245  # treat near-white as background
+            mask = gray < thr
+            ys, xs = np.where(mask)
+            if ys.size < int(CHAR_CROP_CONFIG.get('min_fg_area', 8)):
+                return bgr
+            y1, y2 = int(ys.min()), int(ys.max()) + 1
+            x1, x2 = int(xs.min()), int(xs.max()) + 1
+            pad = int(CHAR_CROP_CONFIG.get('pad', 2))
+            y1 = max(0, y1 - pad); y2 = min(bgr.shape[0], y2 + pad)
+            x1 = max(0, x1 - pad); x2 = min(bgr.shape[1], x2 + pad)
+            cropped = bgr[y1:y2, x1:x2]
+            fp = int(CHAR_CROP_CONFIG.get('final_padding', 0))
+            sq = bool(CHAR_CROP_CONFIG.get('square_output', False))
+            if fp > 0 or sq:
+                h2, w2 = cropped.shape[:2]
+                if sq:
+                    side = max(h2, w2) + 2 * fp
+                    out = np.full((side, side, 3), 255, dtype=cropped.dtype)
+                    y_off = (side - h2) // 2
+                    x_off = (side - w2) // 2
+                    out[y_off:y_off + h2, x_off:x_off + w2] = cropped
+                    return out
+                else:
+                    out = np.full((h2 + 2 * fp, w2 + 2 * fp, 3), 255, dtype=cropped.dtype)
+                    out[fp:fp + h2, fp:fp + w2] = cropped
+                    return out
+            return cropped
+
+        # content-based crop with optional noise cleaning
+        if CHAR_CROP_CONFIG.get('binarize', 'otsu') == 'adaptive':
+            bin_img = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 21, 5)
+        else:
+            _, bin_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+        # optional morphology
+        k = np.ones((3, 3), np.uint8)
+        op = int(CHAR_NOISE_CLEAN_CONFIG.get('morph_open', 0))
+        cl = int(CHAR_NOISE_CLEAN_CONFIG.get('morph_close', 0))
+        if op > 0:
+            bin_img = cv2.morphologyEx(bin_img, cv2.MORPH_OPEN, k, iterations=op)
+        if cl > 0:
+            bin_img = cv2.morphologyEx(bin_img, cv2.MORPH_CLOSE, k, iterations=cl)
+
+        # connected components to remove small specks
+        if CHAR_NOISE_CLEAN_CONFIG.get('enabled', True):
+            num, labels, stats, centroids = cv2.connectedComponentsWithStats((bin_img > 0).astype(np.uint8), connectivity=8)
+            if num > 1:
+                areas = stats[:, cv2.CC_STAT_AREA]
+                idxs = list(range(1, num))
+                h0, w0 = bin_img.shape[:2]
+                min_area_abs = int(CHAR_NOISE_CLEAN_CONFIG.get('min_area', 10))
+                min_area_rel = int(CHAR_NOISE_CLEAN_CONFIG.get('min_area_ratio', 0.002) * h0 * w0)
+                min_area = max(1, max(min_area_abs, min_area_rel))
+                kept = []
+                cx, cy = w0 / 2.0, h0 / 2.0
+                center_bias = float(CHAR_NOISE_CLEAN_CONFIG.get('center_bias', 0.0))
+                best_label = None
+                best_score = -1e18
+                for i in idxs:
+                    a = int(areas[i])
+                    if a < min_area:
+                        continue
+                    (mx, my) = centroids[i]
+                    score = a - center_bias * ((mx - cx) ** 2 + (my - cy) ** 2)
+                    if score > best_score:
+                        best_score = score
+                        best_label = i
+                if best_label is not None:
+                    kept.append(best_label)
+                    sec_ratio = float(CHAR_NOISE_CLEAN_CONFIG.get('second_keep_ratio', 0.35))
+                    sorted_idxs = sorted([i for i in idxs if int(areas[i]) >= min_area], key=lambda i: int(areas[i]), reverse=True)
+                    if len(sorted_idxs) >= 2:
+                        largest = sorted_idxs[0]
+                        second = sorted_idxs[1]
+                        if second != best_label and areas[second] >= areas[largest] * sec_ratio:
+                            kept.append(second)
+                clean = np.zeros_like(bin_img)
+                for lb in kept:
+                    clean[labels == lb] = 255
+                if clean.any():
+                    bin_img = clean
+        ys, xs = np.where(bin_img > 0)
+        if ys.size < CHAR_CROP_CONFIG.get('min_fg_area', 8):
+            return bgr
+        y1, y2 = int(ys.min()), int(ys.max()) + 1
+        x1, x2 = int(xs.min()), int(xs.max()) + 1
+        pad = int(CHAR_CROP_CONFIG.get('pad', 2))
+        y1 = max(0, y1 - pad); y2 = min(bgr.shape[0], y2 + pad)
+        x1 = max(0, x1 - pad); x2 = min(bgr.shape[1], x2 + pad)
+        cropped = bgr[y1:y2, x1:x2]
+        try:
+            sub_mask = bin_img[y1:y2, x1:x2]
+            ys2, xs2 = np.where(sub_mask > 0)
+            if ys2.size >= CHAR_CROP_CONFIG.get('min_fg_area', 8):
+                y1b, y2b = int(ys2.min()), int(ys2.max()) + 1
+                x1b, x2b = int(xs2.min()), int(xs2.max()) + 1
+                pad2 = int(CHAR_CROP_CONFIG.get('pad', 2))
+                y1b = max(0, y1b - pad2); y2b = min(cropped.shape[0], y2b + pad2)
+                x1b = max(0, x1b - pad2); x2b = min(cropped.shape[1], x2b + pad2)
+                cropped = cropped[y1b:y2b, x1b:x2b]
+        except Exception:
+            pass
+        fp = int(CHAR_CROP_CONFIG.get('final_padding', 0))
+        sq = bool(CHAR_CROP_CONFIG.get('square_output', False))
+        if fp > 0 or sq:
+            h3, w3 = cropped.shape[:2]
+            if sq:
+                side = max(h3, w3) + 2 * fp
+                out = np.zeros((side, side, 3), dtype=cropped.dtype)
+                bg = 255
+                out[:] = (bg, bg, bg)
+                y_off = (side - h3) // 2
+                x_off = (side - w3) // 2
+                out[y_off:y_off + h3, x_off:x_off + w3] = cropped
+                return out
+            else:
+                out = np.zeros((h3 + 2 * fp, w3 + 2 * fp, 3), dtype=cropped.dtype)
+                bg = 255
+                out[:] = (bg, bg, bg)
+                out[fp:fp + h3, fp:fp + w3] = cropped
+                return out
+        return cropped
+
     os.makedirs(output_dir, exist_ok=True)
     chars = []
     for i, (x, y, w, h) in enumerate(boxes):
         char_img = img[y:y + h, x:x + w]
+        char_img = _tight_crop(char_img)
         name = f"char_{i + 1:04d}.png"
         cv2.imwrite(os.path.join(output_dir, name), char_img)
         chars.append({'filename': name, 'bbox': (int(x), int(y), int(w), int(h))})
@@ -392,6 +529,19 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
                 pts = np.array(poly, dtype=np.int32).reshape((-1, 1, 2))
                 cv2.polylines(overlay, [pts], isClosed=False, color=(0, 255, 0), thickness=1)
     cv2.imwrite(os.path.join(output_dir, 'overlay.png'), overlay)
+
+    # enrich stats with effective crop/noise settings for debugging
+    try:
+        stats['crop_mode'] = effective_crop_mode
+        stats['crop_enabled'] = bool(CHAR_CROP_CONFIG.get('enabled', True))
+        stats['crop_binarize'] = str(CHAR_CROP_CONFIG.get('binarize', 'otsu'))
+        stats['crop_pad'] = int(CHAR_CROP_CONFIG.get('pad', 2))
+        eff_noise = False if (effective_crop_mode == 'margin_only' or not CHAR_CROP_CONFIG.get('enabled', True)) else bool(CHAR_NOISE_CLEAN_CONFIG.get('enabled', True))
+        stats['noise_clean_enabled'] = eff_noise
+        stats['noise_morph_open'] = int(CHAR_NOISE_CLEAN_CONFIG.get('morph_open', 0))
+        stats['noise_morph_close'] = int(CHAR_NOISE_CLEAN_CONFIG.get('morph_close', 0))
+    except Exception:
+        pass
 
     return {
         'success': True,
@@ -437,7 +587,8 @@ def _find_region_images(base_ocr_dir: str, dataset: str | None = None) -> List[T
 def run_on_ocr_regions(dataset: str | None = None,
                        expected_texts: Dict[str, str] | None = None,
                        enable_dynamic_seam: bool | None = None,
-                       align_expected_count: bool | None = None) -> Dict[str, Any]:
+                       align_expected_count: bool | None = None,
+                       crop_mode_override: str | None = None) -> Dict[str, Any]:
     def _to_py(x):
         import numpy as _np
         if isinstance(x, dict):
@@ -459,7 +610,8 @@ def run_on_ocr_regions(dataset: str | None = None,
         try:
             res = run_on_image(img_path, out_dir, expected_text=exp_text,
                                enable_dynamic_seam=enable_dynamic_seam,
-                               align_expected_count=align_expected_count)
+                               align_expected_count=align_expected_count,
+                               crop_mode_override=crop_mode_override)
             # write per-region summary
             with open(os.path.join(out_dir, 'summary.json'), 'w', encoding='utf-8') as f:
                 json.dump(_to_py(res), f, ensure_ascii=False, indent=2)
@@ -479,6 +631,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-align', action='store_true', help='Disable expected count alignment')
     parser.add_argument('--scan-ocr', action='store_true', help='Scan OCR outputs and process all region images')
     parser.add_argument('--dataset', default=None, help='Restrict to a specific dataset name when using --scan-ocr')
+    parser.add_argument('--crop-mode', default=None, choices=['content', 'margin_only'], help='Override char crop mode for this run')
     args = parser.parse_args()
 
     if args.scan_ocr:
@@ -486,6 +639,7 @@ if __name__ == '__main__':
             dataset=args.dataset,
             enable_dynamic_seam=(False if args.no_seam else None),
             align_expected_count=(False if args.no_align else None),
+            crop_mode_override=args.crop_mode,
         )
         print(json.dumps({'processed': len(summary['processed']), 'errors': summary['errors']}, ensure_ascii=False, indent=2))
     else:
@@ -496,5 +650,16 @@ if __name__ == '__main__':
             expected_text=args.expected_text,
             enable_dynamic_seam=(False if args.no_seam else None),
             align_expected_count=(False if args.no_align else None),
+            crop_mode_override=args.crop_mode,
         )
-        print(json.dumps(res, ensure_ascii=False, indent=2))
+        # sanitize numpy types for safe JSON serialization
+        def _to_py(obj):
+            import numpy as _np
+            if isinstance(obj, dict):
+                return {k: _to_py(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [ _to_py(v) for v in obj ]
+            if isinstance(obj, (_np.generic,)):
+                return obj.item()
+            return obj
+        print(json.dumps(_to_py(res), ensure_ascii=False, indent=2))

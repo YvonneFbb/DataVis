@@ -10,9 +10,17 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-# 添加父目录到系统路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import SEGMENTS_DIR, PREOCR_DIR, OCR_REMOTE_CONFIG
+# 确保能从仓库根导入 src.config
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+try:
+    from src.config import SEGMENTS_DIR, PREOCR_DIR, OCR_REMOTE_CONFIG
+except Exception as e:
+    raise RuntimeError(
+        f"无法导入 src.config（SEGMENTS_DIR/PREOCR_DIR/OCR_REMOTE_CONFIG）。请从仓库根运行或设置 PYTHONPATH。原始错误: {e}"
+    )
 from utils.path import ensure_dir
 
 

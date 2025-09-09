@@ -10,9 +10,16 @@ import requests
 from typing import Dict, Any, Tuple
 from PIL import Image
 
-# 添加父目录到系统路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import VL_CONFIG
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(os.path.dirname(_THIS_DIR))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+try:
+    from src.config import VL_CONFIG
+except Exception as e:
+    raise RuntimeError(
+        f"无法导入 src.config（VL_CONFIG）。请从仓库根运行或设置 PYTHONPATH。原始错误: {e}"
+    )
 
 
 class SiliconFlowVision:
