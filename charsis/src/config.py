@@ -7,7 +7,7 @@
 4. 分割细化配置
 5. OCR 过滤 & 远程服务
 6. VL 相关配置与目录
-7. 裁边 / 噪点清理
+7. 裁边
 8. 校验与摘要工具
 
 注意：外部模块引用的变量名称保持不变，避免破坏现有 import。
@@ -64,31 +64,8 @@ PREPROCESS_INK_PRESERVE_CONFIG = {
     'unsharp_amount': 0.2,  # 反锐化增强边缘的权重（0 关闭）
 }
 
-# ==================== 分割细化与对齐（当前实现使用） ====================
-
-# 分割细化与对齐（动态 seam + 期望数量对齐）
-SEGMENT_REFINEMENT_CONFIG = {
-    # 是否启用动态 seam 切割（在初步分割的谷线附近寻找一条“避开笔画”的最小代价路径来切割）
-    'enable_dynamic_seam': True,
-    # seam 搜索带宽（相对于估计单字高度的比例；例如 0.3 表示在 ±0.3H 的窗口内搜索路径）
-    'seam_band_ratio': 0.1,
-    # seam 代价权重：越小越偏好路径通过该特征
-    'seam_ink_weight': 1.0,   # 墨迹（前景）代价
-    'seam_dist_weight': 0.5,  # 距离前景越远越好（使用背景距前景的DT）
-    'seam_grad_weight': 0.2,  # 图像梯度，惩罚切过强边缘
-    # 期望数量对齐（利用外部提供的期望字数进行轻量 split/merge 调整）
-    'expected_count_alignment': True,
-    # 允许的最小分段高度（相对整图高度），避免产生过薄的小碎片
-    'min_segment_height_ratio': 0.25,
-    'max_split_attempts': 3,
-    'max_merge_attempts': 3,
-    # 调试叠加绘制
-    'debug_overlay': True,
-}
-
-#（以下 legacy 配置已移除：IQR_MULTIPLIER、VERTICAL_CHAR_CONFIG、WIDE_CHAR_CONFIG、
-# RECLASSIFY_CONFIG、PROJECTION_CONFIG、RED_RED_MERGE_CONFIG、RED_GREEN_MERGE_CONFIG、
-# CHAR_CLASSIFICATION_CONFIG。如需回退旧算法，可从版本历史中恢复。）
+# ==================== 分割（ocrmac 版本） ====================
+# 新版分割直接依赖 ocrmac，不再使用 seam/expected-count 对齐参数。
 
 # OCR过滤配置
 OCR_FILTER_CONFIG = {
@@ -158,19 +135,6 @@ CHAR_CROP_CONFIG = {
     'binarize': 'otsu',       # 'otsu' | 'adaptive'
 }
 
-# ==================== 单字噪点清理配置 ====================
-# 在切片上执行连通域过滤，移除小墨点/残片；默认保留最大或最居中的主要前景
-CHAR_NOISE_CLEAN_CONFIG = {
-    'enabled': False,
-    'min_area': 10,
-    'min_area_ratio': 0.002,
-    'keep_largest': True,
-    'center_bias': 0.001,
-    'second_keep_ratio': 0.35,
-    'morph_open': 0,
-    'morph_close': 0,
-}
-
 # ==================== 8. 校验与摘要工具 ====================
 def validate_config() -> None:
     mode = CHAR_CROP_CONFIG.get('mode')
@@ -178,10 +142,7 @@ def validate_config() -> None:
         raise ValueError(f"CHAR_CROP_CONFIG.mode 非法: {mode}")
     if CHAR_CROP_CONFIG.get('pad', 0) < 0:
         raise ValueError("CHAR_CROP_CONFIG.pad 不能为负数")
-    if CHAR_NOISE_CLEAN_CONFIG.get('min_area', 1) < 0:
-        raise ValueError("CHAR_NOISE_CLEAN_CONFIG.min_area 不能为负数")
-    if SEGMENT_REFINEMENT_CONFIG.get('seam_band_ratio', 0.1) <= 0:
-        raise ValueError("SEGMENT_REFINEMENT_CONFIG.seam_band_ratio 应 > 0")
+    # 新版分割无需 seam 配置校验
 
 def config_summary(compact: bool = True) -> Dict[str, Any]:
     summary = {
@@ -194,18 +155,11 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
             'stroke_heal_enabled': PREPROCESS_STROKE_HEAL_CONFIG.get('enabled'),
             'ink_preserve_enabled': PREPROCESS_INK_PRESERVE_CONFIG.get('enabled'),
         },
-        'segmentation': {
-            'dynamic_seam': SEGMENT_REFINEMENT_CONFIG.get('enable_dynamic_seam'),
-            'expected_count_alignment': SEGMENT_REFINEMENT_CONFIG.get('expected_count_alignment'),
-        },
+    'segmentation': {'backend': 'ocrmac'},
         'crop': {
             'enabled': CHAR_CROP_CONFIG.get('enabled'),
             'mode': CHAR_CROP_CONFIG.get('mode'),
             'pad': CHAR_CROP_CONFIG.get('pad'),
-        },
-        'noise_clean': {
-            'enabled': CHAR_NOISE_CLEAN_CONFIG.get('enabled'),
-            'min_area': CHAR_NOISE_CLEAN_CONFIG.get('min_area'),
         },
         'ocr_remote': {
             'server_url': OCR_REMOTE_CONFIG.get('server_url'),
@@ -221,9 +175,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
     return {
         'PREPROCESS_STROKE_HEAL_CONFIG': PREPROCESS_STROKE_HEAL_CONFIG,
         'PREPROCESS_INK_PRESERVE_CONFIG': PREPROCESS_INK_PRESERVE_CONFIG,
-        'SEGMENT_REFINEMENT_CONFIG': SEGMENT_REFINEMENT_CONFIG,
         'CHAR_CROP_CONFIG': CHAR_CROP_CONFIG,
-        'CHAR_NOISE_CLEAN_CONFIG': CHAR_NOISE_CLEAN_CONFIG,
         'OCR_FILTER_CONFIG': OCR_FILTER_CONFIG,
         'OCR_REMOTE_CONFIG': OCR_REMOTE_CONFIG,
         'VL_CONFIG': VL_CONFIG,
@@ -233,7 +185,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
 __all__ = [
     'PROJECT_ROOT','DATA_DIR','RAW_DIR','RESULTS_DIR','PREPROCESSED_DIR','SEGMENTS_DIR','OCR_DIR','ANALYSIS_DIR','PREOCR_DIR',
     'PREPROCESS_STROKE_HEAL_CONFIG','PREPROCESS_INK_PRESERVE_CONFIG',
-    'SEGMENT_REFINEMENT_CONFIG','CHAR_CROP_CONFIG','CHAR_NOISE_CLEAN_CONFIG',
+    'CHAR_CROP_CONFIG',
     'OCR_FILTER_CONFIG','OCR_REMOTE_CONFIG',
     'VL_CONFIG','VL_CHARACTER_EVALUATION_CONFIG',
     'validate_config','config_summary'

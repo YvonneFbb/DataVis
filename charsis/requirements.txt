@@ -2,3 +2,6 @@ opencv-python-headless
 matplotlib
 numpy
 scipy
+ocrmac
+pyobjc-framework-Vision
+Pillow

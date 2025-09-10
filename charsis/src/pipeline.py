@@ -109,8 +109,13 @@ def stage_segment(region_images: List[str]) -> Dict[str, Any]:
         base = os.path.splitext(os.path.basename(img_path))[0]
         out_dir = os.path.join(SEGMENTS_DIR, dataset, base)
         os.makedirs(out_dir, exist_ok=True)
-        res = run_on_image(img_path, out_dir)
-        processed.append({'image': img_path, 'out_dir': out_dir, 'count': res.get('character_count', 0)})
+    res = run_on_image(img_path, out_dir, framework='livetext')
+    processed.append({
+            'image': img_path,
+            'out_dir': out_dir,
+            'count': res.get('character_count', 0),
+            'overlay': res.get('overlay')
+    })
     return {'processed': processed}
 
 
@@ -150,8 +155,12 @@ def run_pipeline(input_path: str, stages: List[str]) -> Dict[str, Any]:
             result['region_images_found'] = len(region_images)
         elif st == 'segment':
             if not region_images:
-                # 若没有 region 图，则把 current_images 当作 region 图处理
-                region_images = current_images
+                # 如果用户直接传入了 preocr 数据集目录，则从该目录收集 region_images
+                if os.path.isdir(input_path) and ('preocr' in os.path.normpath(input_path).split(os.sep)):
+                    region_images = _collect_region_images(input_path)
+                # 否则退回到当前图片列表
+                if not region_images:
+                    region_images = current_images
             seg_info = stage_segment(region_images)
             result['segment'] = {'processed': len(seg_info.get('processed', []))}
         elif st == 'ocr':
@@ -168,10 +177,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='简化流水线：根据阶段执行（配置来自 config.py）')
     parser.add_argument('input', help='输入文件或目录')
     parser.add_argument('--stages', default='preprocess,segment,ocr', help='逗号分隔阶段序列: preprocess,preocr,segment,ocr')
+    parser.add_argument('--stage', default=None, help='单阶段快捷参数（等价于 --stages 单值），例如: --stage segment')
     parser.add_argument('--json', action='store_true', help='输出 JSON 结果')
     args = parser.parse_args()
 
-    stages = [s.strip() for s in args.stages.split(',') if s.strip()]
+    if args.stage:
+        stages = [s.strip() for s in args.stage.split(',') if s.strip()]
+    else:
+        stages = [s.strip() for s in args.stages.split(',') if s.strip()]
     try:
         out = run_pipeline(args.input, stages)
         if args.json:
