@@ -1,0 +1,50 @@
+# 轮廓提取配置（TOML）
+# 提示：本文件的值作为基线，命令行参数可覆盖它们。
+
+# 输入/输出
+input = "process/demo.png"          # 输入图像路径
+output_dir = "process/out"          # 输出目录
+
+# 图像增强（亮度/对比度/饱和度）
+enhance = true                       # 是否进行增强（CLAHE + 饱和度 + gamma）
+clahe_clip = 4.0                     # CLAHE 对比度限制
+clahe_tile = 8                       # CLAHE 网格尺寸（tileGridSize）
+sat_factor = 1.2                     # HSV 饱和度系数
+gamma = 1.0                          # gamma 校正（1.0 表示不变）
+use_enhanced_for_mask = true         # 掩膜计算是否使用增强后的图
+
+# 分割方法与极性
+method = "auto"                     # auto | otsu | adaptive | canny
+invert = "auto"                     # auto | true | false（掩膜是否取反）
+
+# 面积过滤（比例）
+min_area = 0.005                     # 小于该比例的轮廓会被丢弃
+
+# 预处理与形态学
+bilateral = true                     # 双边滤波（更保边）
+morph = true                         # 开启形态学清理
+close_k = 7                          # 闭运算核大小（越大越连通）
+open_k = 5                           # 开运算核大小（越大越去噪）
+close_iter = 2                       # 闭运算迭代次数
+open_iter = 1                        # 开运算迭代次数
+
+# 轮廓提取与渲染
+external = true                      # 仅外轮廓
+keep_biggest = true                  # 仅保留最大连通域（常见单目标）
+chain = "none"                       # none | simple | tc89 | tc89_l1
+simplify = 0.0                       # RDP 多边形简化强度（0 表示关闭，最贴合掩膜）
+thickness = 2                        # 叠加线条粗细
+
+# 纹理边缘提取
+texture = true                       # 是否提取纹理边缘
+texture_method = "canny"            # canny | sobel | laplacian | fusion（多方法融合）
+texture_sigma = 0.33                 # canny 自适应参数（与灰度中位数相关）
+texture_sobel_ksize = 3              # sobel 核大小（奇数）
+texture_lap_ksize = 3                # laplacian 核大小（奇数）
+texture_thresh = "auto"              # sobel/laplacian 二值阈值（或 "auto"=Otsu）
+texture_close_k = 3                  # 纹理边缘闭运算核（连通断裂）
+texture_blur_ksize = 3               # 纹理灰度预模糊核大小
+use_enhanced_for_texture = true      # 纹理计算是否使用增强后的图
+
+# 导出
+save_svg = true                      # 导出 SVG 多边形

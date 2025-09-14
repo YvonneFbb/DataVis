@@ -1,0 +1,20 @@
+# 仅纹理提取配置
+input = "process/demo.png"
+output_dir = "process/out"
+
+# 图像增强
+enhance = true
+clahe_clip = 4.0
+clahe_tile = 8
+sat_factor = 1.2
+gamma = 1.0
+use_enhanced = true
+
+# 纹理方法
+texture_method = "fusion"   # canny | sobel | laplacian | fusion
+texture_sigma = 0.33
+texture_sobel_ksize = 3
+texture_lap_ksize = 3
+texture_thresh = "auto"
+texture_close_k = 3
+texture_blur_ksize = 3
