@@ -109,13 +109,13 @@ def stage_segment(region_images: List[str]) -> Dict[str, Any]:
         base = os.path.splitext(os.path.basename(img_path))[0]
         out_dir = os.path.join(SEGMENTS_DIR, dataset, base)
         os.makedirs(out_dir, exist_ok=True)
-    res = run_on_image(img_path, out_dir, framework='livetext')
-    processed.append({
+        res = run_on_image(img_path, out_dir, framework='livetext')
+        processed.append({
             'image': img_path,
             'out_dir': out_dir,
             'count': res.get('character_count', 0),
             'overlay': res.get('overlay')
-    })
+        })
     return {'processed': processed}
 
 

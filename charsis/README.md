@@ -1,6 +1,6 @@
 # Charsis - 刻本图片文字处理与分析
 
-本项目提供刻本图片的端到端处理流水线：预处理 → 文本区域检测（preOCR）→ 字符分割 → 字符识别（postOCR），并附带可选的分析与可视化。
+本项目提供刻本图片的端到端处理流水线：预处理 → 文本区域检测（preOCR）→ 字符分割 → 字符识别（postOCR），并附带可选的分析与可视化。当前分割基于 Apple LiveText（ocrmac）检测框，并在坐标级进行“投影/GrabCut/形态学”三种可切换的轻量精修，以获得稳健的单字切片。
 
 ## 目录结构
 
@@ -93,31 +93,24 @@ python hybrid_pipeline.py --input data/raw/demo.jpg --skip-segment
 - regions.json：区域元数据（rect_bbox、confidence、text 等）
 - region_images/region_XXX.jpg：每个检测到的文本区域截图
 
-### 3) 字符分割 segmentation（垂直单列）
+### 3) 字符分割 segmentation（基于 ocrmac / LiveText）
 
-- 单张 region 图：
+- 直接用流水线运行单张 region 图（推荐）
 ```bash
-python src/segmentation/vertical_hybrid.py \
-    --image data/results/preocr/demo/region_images/region_001.jpg \
-    --out   data/results/segments/demo/region_001
+.venv/bin/python src/pipeline.py --stage=segment \
+    data/results/preocr/demo_preprocessed/region_images/region_001.jpg --json
 ```
-可选参数：
-- `--no-seam` 关闭动态 seam 细化
-- `--no-align` 关闭基于期望字数的 split/merge 对齐（通常保持开启）
 
-- 批量处理 preOCR 的所有 region 图：
+- 扫描整个 preOCR 结果批量分割：
 ```bash
-python src/segmentation/vertical_hybrid.py --scan-ocr --dataset demo
+.venv/bin/python src/pipeline.py --stage=segment \
+    data/results/preocr/<dataset>/region_images/region_*.jpg --json
 ```
+
 输出：每个 region 写到 `data/results/segments/<dataset>/<region_xxx>/`，包含：
-- `char_*.png`：裁剪后的字符切片（已做紧致裁边与少量噪声清理）
-- `overlay.png`：分割框与 seam 叠加图
-- `summary.json`：该 region 的分割统计
-
-相关配置（`src/config.py`）：
-- SEGMENT_REFINEMENT_CONFIG：seam 带宽/代价权重、期望数量对齐
-- CHAR_CROP_CONFIG：切片内容裁边/留白/是否方形
-- CHAR_NOISE_CLEAN_CONFIG：连通域噪点清理、形态学微调
+- `char_*.png`：裁剪后的字符切片（坐标级精修 + 内容裁边）
+- `overlay.png`：原始框（细线）与精修框（粗线）的叠加图
+- `summary.json`：该 region 的统计（包含 refine 配置快照）
 
 ### 4) 字符识别与重命名 postOCR
 
@@ -137,11 +130,11 @@ python src/postocr/core.py
 ## 一键式流水线（推荐）
 
 ```bash
-python hybrid_pipeline.py --input data/raw/demo.jpg
+ .venv/bin/python hybrid_pipeline.py --input data/raw/demo.jpg
 ```
 可跳过任意阶段：
 ```bash
-python hybrid_pipeline.py --input data/raw/demo.jpg \
+ .venv/bin/python hybrid_pipeline.py --input data/raw/demo.jpg \
     --skip-preprocess   # 直接用原图做 preOCR
     --skip-ocr          # 使用已有 preOCR 结果做分割
     --skip-segment      # 仅做预处理+preOCR
@@ -153,6 +146,58 @@ python hybrid_pipeline.py --input data/raw/demo.jpg \
 - `data/results/segments/<基名>/<region_xxx>/`
 - `data/results/segments/<基名>/all_characters/`（所有字符汇总拷贝）
 - `data/results/segments/<基名>/pipeline_summary.json`
+
+## 配置与调参（config.py）
+
+所有配置集中在 `src/config.py`。这里重点说明与分割精修相关的 `SEGMENT_REFINE_CONFIG` 与切片裁边 `CHAR_CROP_CONFIG`。
+
+### SEGMENT_REFINE_CONFIG（分割后精修：坐标级）
+
+- 基本开关
+    - enabled: 是否启用精修
+    - mode: 'projection' | 'grabcut' | 'morph'（默认 'projection'）
+
+- 扩张（先扩后裁，支持逐侧）
+    - expand_px: 对称扩张
+    - expand_px_x / expand_px_y: 横/纵优先扩张
+    - expand_left / right / top / bottom: 逐侧扩张（最高优先）
+
+- 投影裁边（projection，按“谷值法”）
+    - 顺序：仅在左右切后，再计算上下投影并切上下。
+    - binarize: 'adaptive' | 'otsu'（投影前的二值化），配合 adaptive_block / adaptive_C
+    - proj_smooth: 投影平滑窗口（像素）
+    - proj_valley_ratio / proj_valley_abs：谷值阈（相对/绝对），用于识别主块与噪声间低投影带
+    - edge_drop_enabled：启用基于“落差”的边缘细化（梯度+低/高区稳定性）
+    - edge_drop_hi_ratio / edge_drop_lo_ratio：高/低区判定阈值（相对 median）
+    - edge_drop_min_grad_ratio：最小梯度幅值（相对投影峰值）
+    - edge_drop_min_high_run / edge_drop_window：最小高区连续长度与搜索窗口
+    - proj_trim_left/right/top/bottom_max: 每侧最多可裁掉的像素上限
+    - min_width_after_trim / min_height_after_trim: 裁后最小宽/高保护
+    - final_pad: 裁后再回填的统一留白（像素）
+
+- 边线清理（可选，用于页边装订/边框线）
+    - strip_border_lines / strip_search_px / strip_max_width / strip_min_coverage
+
+- GrabCut（可选，慢但边界更紧）
+    - gc_iter / gc_inner_shrink
+
+- Morph（保留，默认不建议）
+    - morph_open / morph_close / keep_components / min_area_ratio
+
+调参建议：
+- 两侧留白：适当提高 proj_valley_ratio（0.06–0.08）或增大 proj_smooth=5；放宽 proj_trim_left/right_max。
+- 切过头：降低 proj_valley_ratio（0.03–0.04）或增大 final_pad。
+- 竖排常需更大上下扩张：设置 expand_top/bottom=6~8，左右保持 2~3。
+- 页边竖线干扰：开启 strip_border_lines，调小 strip_max_width 或增大 strip_min_coverage。
+
+### CHAR_CROP_CONFIG（切片内容裁边）
+- enabled: 是否启用
+- mode: 'content' | 'margin_only'
+- pad: 内容裁边后再扩的像素
+- final_padding: 统一额外留白
+- square_output: 是否补成正方形
+- min_fg_area: 最小前景面积过滤
+- binarize: 'otsu' | 'adaptive'（用于内容裁边）
 
 ## 调参与常见问题
 
@@ -173,8 +218,8 @@ python hybrid_pipeline.py --input data/raw/demo.jpg \
 
 ## 版本与说明
 
-- 当前默认分割器为 `src/segmentation/vertical_hybrid.py`，支持动态 seam 与期望数量对齐。
-- 历史的投影参数（老版 PROJECTION_CONFIG）已移除；若需回退旧算法，请检索历史版本记录。
+- 当前默认分割器为 `src/segmentation/vertical_hybrid.py`，基于 ocrmac（LiveText）检测框 + 坐标级精修（projection/GrabCut/morph）。
+- 老版 seam/对齐与旧 PROJECTION_CONFIG 已移除；当前实现以 LiveText 框为准，不再依赖旧式启发式。
 
 ---
 

@@ -24,8 +24,8 @@ except Exception as e:
 from src.utils.path import ensure_dir
 
 try:
-    # 远程客户端位于 preocr 阶段
-    from preocr.remote_paddleocr import RemotePaddleOCRClient
+    # 远程客户端位于 preocr 阶段（统一使用 src 前缀导入）
+    from src.preocr.remote_paddleocr import RemotePaddleOCRClient
     OCR_AVAILABLE = True
 except ImportError:
     print("警告: RemotePaddleOCRClient 未安装或不可用。OCR功能将被禁用。")
