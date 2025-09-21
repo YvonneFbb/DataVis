@@ -135,34 +135,34 @@ CHAR_CROP_CONFIG = {
     'binarize': 'otsu',       # 'otsu' | 'adaptive'
 }
 
-# ==================== 分割后精修（Refine）配置（精简：仅边框裁切相关） ====================
+# ==================== 分割后精修（Refine）配置（精简：连通域 + 投影裁切） ====================
 SEGMENT_REFINE_CONFIG = {
     'enabled': True,
-    'mode': 'border',          # 仅使用 border 模式
-    'expand_px': 2,            # ROI 扩张（像素）
+    'mode': 'ccprojection',    # 连通域(CC)预滤 + Projection 裁切（当前仅左右），调试图合并展示
+    'expand_px': 4,            # ROI 扩张（像素）
     'final_pad': 0,            # 裁后统一回填（像素）
     'debug_visualize': True,
     'debug_dirname': 'debug',
 }
 
-# Border-only trimming 参数（供 border 模式引用）
-BORDER_TRIM_CONFIG = {
+# Projection trimming 参数（供 projection 模式引用）
+PROJECTION_TRIM_CONFIG = {
     'binarize': 'otsu',          # 'otsu' | 'adaptive'
     'adaptive_block': 31,
     'adaptive_C': 3,
-    # 边带与线证据
-    'band_px': 10,
-    'line_cov_thr': 0.8,         # 列覆盖度阈值（判定为“线”）
-    'line_max_width': 4,         # 认为是边线的最大连通域宽度
-    'line_min_coverage': 0.80,   # 连通域在高度/宽度上的覆盖比例（0~1）
-    # 投影与落差
-    'smooth': 5,
-    'hi_ratio': 0.5,
-    'lo_ratio': 0.22,
-    'min_high_run': 4,
-    'grad_min_ratio': 0.14,
-    'max_shift': 6,
-    'search_half': 8,
+    'run_min_coverage_ratio': 0.01,
+    'run_min_coverage_abs': 0.005,
+    'primary_run_min_mass_ratio': 0.5,
+    'primary_run_min_length_ratio': 0.3,
+    'tighten_min_coverage': 0.01,
+}
+
+# Connected-component pre-filter (applied before projection trim)
+CC_FILTER_CONFIG = {
+    'edge_margin': 2,            # 认为接触边缘的像素阈
+    'min_area_ratio': 0.015,     # 面积占比阈值（与边接触才删除）
+    'max_aspect_for_edge': 6.0, # 触边且极端瘦长的组件删除
+    'min_dim_px': 2,             # 触边且最小边短于该值删除
 }
 
 # ==================== 8. 校验与摘要工具 ====================
@@ -187,7 +187,8 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
             'stroke_heal_enabled': PREPROCESS_STROKE_HEAL_CONFIG.get('enabled'),
             'ink_preserve_enabled': PREPROCESS_INK_PRESERVE_CONFIG.get('enabled'),
         },
-    'segmentation': {'backend': 'ocrmac'},
+        'segmentation': {'backend': 'ocrmac'},
+        'projection_trim': PROJECTION_TRIM_CONFIG,
         'crop': {
             'enabled': CHAR_CROP_CONFIG.get('enabled'),
             'mode': CHAR_CROP_CONFIG.get('mode'),
@@ -208,7 +209,8 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
         'PREPROCESS_STROKE_HEAL_CONFIG': PREPROCESS_STROKE_HEAL_CONFIG,
         'PREPROCESS_INK_PRESERVE_CONFIG': PREPROCESS_INK_PRESERVE_CONFIG,
         'CHAR_CROP_CONFIG': CHAR_CROP_CONFIG,
-    'SEGMENT_REFINE_CONFIG': SEGMENT_REFINE_CONFIG,
+        'SEGMENT_REFINE_CONFIG': SEGMENT_REFINE_CONFIG,
+        'PROJECTION_TRIM_CONFIG': PROJECTION_TRIM_CONFIG,
         'OCR_FILTER_CONFIG': OCR_FILTER_CONFIG,
         'OCR_REMOTE_CONFIG': OCR_REMOTE_CONFIG,
         'VL_CONFIG': VL_CONFIG,
@@ -218,7 +220,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
 __all__ = [
     'PROJECT_ROOT','DATA_DIR','RAW_DIR','RESULTS_DIR','PREPROCESSED_DIR','SEGMENTS_DIR','OCR_DIR','ANALYSIS_DIR','PREOCR_DIR',
     'PREPROCESS_STROKE_HEAL_CONFIG','PREPROCESS_INK_PRESERVE_CONFIG',
-    'CHAR_CROP_CONFIG','SEGMENT_REFINE_CONFIG','BORDER_TRIM_CONFIG',
+    'CHAR_CROP_CONFIG','SEGMENT_REFINE_CONFIG','PROJECTION_TRIM_CONFIG','CC_FILTER_CONFIG',
     'OCR_FILTER_CONFIG','OCR_REMOTE_CONFIG',
     'VL_CONFIG','VL_CHARACTER_EVALUATION_CONFIG',
     'validate_config','config_summary'
