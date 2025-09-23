@@ -3,7 +3,8 @@ Connected-component pre-filter for segmentation.
 
 Goal: remove clearly abnormal regions before projection trimming, with
 minimal parameters and conservative rules:
-  - tiny components relative to ROI area and touching image edges
+  - tiny components relative to ROI area and touching the image border directly
+  - tiny components relative to ROI area and within an edge margin band
   - edge-touching, extremely slender components (very high aspect ratio)
   - edge-touching components with min dimension below a small pixel threshold
 
@@ -21,7 +22,8 @@ def refine_binary_components(bin_img: np.ndarray, params: Dict) -> np.ndarray:
     return the cleaned image.
 
     Parameters (with conservative defaults provided by config):
-      - min_area_ratio: components with area < ratio * (H*W) AND touching edge are removed
+      - min_area_ratio: components with area < ratio * (H*W) AND touching edge band are removed
+      - border_touch_min_area_ratio: components with area < ratio * (H*W) AND touching image border are removed
       - edge_margin: how close to edge counts as touching (in pixels)
       - max_aspect_for_edge: if component touches edge and max(w/h, h/w) >= this, remove
       - min_dim_px: if component touches edge and min(w, h) <= this, remove
@@ -36,14 +38,22 @@ def refine_binary_components(bin_img: np.ndarray, params: Dict) -> np.ndarray:
     edge_margin = int(params.get('edge_margin', 6))
     max_aspect_for_edge = float(params.get('max_aspect_for_edge', 10.0))
     min_dim_px = int(params.get('min_dim_px', 2))
+    border_touch_min_area_ratio = float(params.get('border_touch_min_area_ratio', min_area_ratio))
 
     area_thr = max(1, int(min_area_ratio * h * w))
+    border_area_thr = max(1, int(border_touch_min_area_ratio * h * w))
     m = (bin_img > 0).astype(np.uint8)
     num, labels, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
     if num <= 1:
         return bin_img
     for i in range(1, num):
         x, y, ww, hh, area = stats[i]
+        touches_border = (
+            x == 0 or y == 0 or (x + ww) >= w or (y + hh) >= h
+        )
+        if touches_border and area < border_area_thr:
+            bin_img[labels == i] = 0
+            continue
         # edge contact test (with margin)
         touches_edge = (
             x <= edge_margin or y <= edge_margin or

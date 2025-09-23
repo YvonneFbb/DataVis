@@ -4,10 +4,8 @@ Post-OCR 模块：对分割后的字符图片进行识别与重命名
 import os
 import sys
 import re
-import cv2
 import json
 from collections import defaultdict
-from PIL import Image
 from typing import List, Tuple, Dict, Any, Optional
 
 # 确保从仓库根导入 src.config
@@ -87,14 +85,8 @@ def recognize_character_images(input_dir: str, output_dir: str, config: Dict[str
                 output_filename = f"{safe_text}.png" if name_counter[safe_text] == 1 else f"{safe_text}_{name_counter[safe_text]:02d}.png"
                 stats['recognized'] += 1; ocr_result['status'] = 'recognized'
             output_path = os.path.join(output_dir, output_filename)
-            try:
-                img_to_save = cv2.imread(input_path)
-                if img_to_save is None:
-                    import shutil; shutil.copy2(input_path, output_path)
-                else:
-                    cv2.imwrite(output_path, img_to_save)
-            except Exception:
-                import shutil; shutil.copy2(input_path, output_path)
+            import shutil
+            shutil.copy2(input_path, output_path)
             ocr_result['output_file'] = output_filename; ocr_results.append(ocr_result)
             if i % 50 == 0 or i == len(char_files):
                 print(f"已处理: {i}/{len(char_files)} ({i/len(char_files)*100:.1f}%)")
