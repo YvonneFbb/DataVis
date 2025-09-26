@@ -36,7 +36,7 @@ def _list_images(path: str) -> List[Path]:
     raise FileNotFoundError(path)
 
 
-def run_preocr_on_image(client: RemotePaddleOCRClient, image_path: Path) -> Dict[str, Any]:
+def run_preocr_on_image(client: RemotePaddleOCRClient, image_path: Path, output_subdir: str = None) -> Dict[str, Any]:
     # 尝试 full document
     try:
         if hasattr(client, 'predict_full_document'):
@@ -51,7 +51,10 @@ def run_preocr_on_image(client: RemotePaddleOCRClient, image_path: Path) -> Dict
         return {'success': False, 'error': 'cannot read image'}
 
     base = image_path.stem
-    out_dir = Path(PREOCR_DIR) / base
+    if output_subdir and output_subdir != '.':
+        out_dir = Path(PREOCR_DIR) / output_subdir / base
+    else:
+        out_dir = Path(PREOCR_DIR) / base
     region_dir = out_dir / 'region_images'
     region_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,6 +138,14 @@ def run_preocr_on_image(client: RemotePaddleOCRClient, image_path: Path) -> Dict
         pass
     return {'success': True, 'regions': len(regions), 'out_dir': str(out_dir), 'overlay': str(out_dir / 'overlay.jpg')}
 
+
+def run_preocr_on_single_image(input_path: str, output_subdir: str = None) -> Dict[str, Any]:
+    """处理单张图片的preOCR，支持指定输出子目录"""
+    client = RemotePaddleOCRClient()
+    image_path = Path(input_path)
+    if not image_path.is_file():
+        return {'success': False, 'error': f'File not found: {input_path}'}
+    return run_preocr_on_image(client, image_path, output_subdir)
 
 def run_preocr(input_path: str) -> Dict[str, Any]:
     client = RemotePaddleOCRClient()

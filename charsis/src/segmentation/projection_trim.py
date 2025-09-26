@@ -78,12 +78,13 @@ def _trim_axis(mask: np.ndarray, axis: int, params: Dict) -> Tuple[int, int]:
         return 0, total_len
     min_cov = max(float(params.get('run_min_coverage_abs', 0.005)),
                    float(params.get('run_min_coverage_ratio', 0.01)) * max_cov)
-    runs = _find_runs(coverage, min_cov)
     limit_ratio = float(params.get(limit_ratio_key, 1.0))
     limit_px = int(params.get(limit_px_key, total_len))
     ratio_bound = total_len if limit_ratio <= 0 else int(round(total_len * min(limit_ratio, 1.0)))
     px_bound = total_len if limit_px <= 0 else limit_px
     trim_limit = max(0, min(total_len, ratio_bound, px_bound))
+
+    runs = _find_runs(coverage, min_cov)
 
     if not runs:
         # only空列，允许裁掉到限制位置

@@ -17,7 +17,7 @@
 所有参数依赖 config.py，不再暴露细粒度 CLI 选项；如需高级调参使用 pipeline_advanced.py。
 """
 from __future__ import annotations
-import os, sys, json, glob
+import os, sys, json, glob, shutil
 from typing import List, Dict, Any
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +28,7 @@ if _REPO_ROOT not in sys.path:
 try:
     from src import config
     from src.config import (
-        RAW_DIR, PREPROCESSED_DIR, PREOCR_DIR, SEGMENTS_DIR, OCR_DIR
+        RAW_DIR, PREPROCESSED_DIR, PREOCR_DIR, SEGMENTS_DIR, POSTOCR_DIR
     )
 except Exception as e:
     raise RuntimeError(f"配置导入失败: {e}")
@@ -41,34 +41,49 @@ def _is_image(path: str) -> bool:
 
 
 def _list_images_in_dir(folder: str) -> List[str]:
+    """递归遍历目录查找所有支持的图片文件"""
     files = []
-    for ext in IMG_EXT:
-        files.extend(glob.glob(os.path.join(folder, f'*{ext}')))
-    files = [f for f in files if os.path.isfile(f)]
+    for root, dirs, filenames in os.walk(folder):
+        for filename in filenames:
+            if any(filename.lower().endswith(ext) for ext in IMG_EXT):
+                files.append(os.path.join(root, filename))
     files.sort()
     return files
 
 
-def stage_preprocess(inputs: List[str]) -> List[str]:
+def stage_preprocess(inputs: List[str], input_base_dir: str) -> List[str]:
     from src.preprocess.core import preprocess_image
-    os.makedirs(PREPROCESSED_DIR, exist_ok=True)
     outputs = []
     for p in inputs:
+        # 计算相对路径以保持目录结构
+        rel_path = os.path.relpath(p, input_base_dir)
+        rel_dir = os.path.dirname(rel_path)
         base, ext = os.path.splitext(os.path.basename(p))
-        out_path = os.path.join(PREPROCESSED_DIR, f"{base}_preprocessed{ext}")
+
+        # 创建对应的输出目录结构
+        if rel_dir and rel_dir != '.':
+            out_dir = os.path.join(PREPROCESSED_DIR, rel_dir)
+        else:
+            out_dir = PREPROCESSED_DIR
+        os.makedirs(out_dir, exist_ok=True)
+
+        out_path = os.path.join(out_dir, f"{base}_preprocessed{ext}")
         ok = preprocess_image(p, out_path)
         if ok:
             outputs.append(out_path)
     return outputs
 
 
-def stage_preocr(inputs: List[str]) -> Dict[str, Any]:
+def stage_preocr(inputs: List[str], input_base_dir: str) -> Dict[str, Any]:
     # 使用远程服务对每张图做区域检测
-    from src.preocr.run_preocr import run_preocr as _run
+    from src.preocr.run_preocr import run_preocr_on_single_image
     summary: Dict[str, Any] = {'inputs': len(inputs), 'details': []}
     for p in inputs:
         try:
-            r = _run(p)
+            # 计算相对路径以保持目录结构
+            rel_path = os.path.relpath(p, input_base_dir)
+            rel_dir = os.path.dirname(rel_path)
+            r = run_preocr_on_single_image(p, rel_dir)
         except Exception as e:
             r = {'error': str(e), 'input': p}
         summary['details'].append(r)
@@ -101,28 +116,40 @@ def stage_segment(region_images: List[str]) -> Dict[str, Any]:
         # out dir: segments/<dataset_or_misc>/<region_name>
         # 解析 dataset: 如果路径包含 /preocr/<ds>/region_images/region_xxx.jpg
         parts = img_path.split(os.sep)
-        try:
-            idx = parts.index('preocr')
-            dataset = parts[idx+1]
-        except ValueError:
-            dataset = 'misc'
+    try:
+        idx = parts.index('preocr')
+        dataset = parts[idx+1]
+    except ValueError:
+        dataset = 'misc'
         base = os.path.splitext(os.path.basename(img_path))[0]
         out_dir = os.path.join(SEGMENTS_DIR, dataset, base)
         os.makedirs(out_dir, exist_ok=True)
         res = run_on_image(img_path, out_dir, framework='livetext')
+        overlay_path = res.get('overlay')
+        overlay_target = None
+        if overlay_path and os.path.isfile(overlay_path):
+            overlay_dir = os.path.join(SEGMENTS_DIR, dataset, '_overlays')
+            os.makedirs(overlay_dir, exist_ok=True)
+            overlay_target = os.path.join(overlay_dir, f"{base}_overlay.png")
+            try:
+                shutil.copy2(overlay_path, overlay_target)
+            except Exception as e:
+                print(f"warning: overlay copy failed for {overlay_path}: {e}")
+                overlay_target = None
         processed.append({
             'image': img_path,
             'out_dir': out_dir,
             'count': res.get('character_count', 0),
-            'overlay': res.get('overlay')
+            'overlay': overlay_path,
+            'overlay_aggregated': overlay_target,
         })
     return {'processed': processed}
 
 
-def stage_ocr() -> Dict[str, Any]:
+def stage_postocr() -> Dict[str, Any]:
     from src.postocr.core import process_all_segment_results
-    stats = process_all_segment_results(SEGMENTS_DIR, OCR_DIR)
-    return stats
+    force = bool(os.getenv('POSTOCR_FORCE'))
+    return process_all_segment_results(config={'force': force})
 
 
 def run_pipeline(input_path: str, stages: List[str]) -> Dict[str, Any]:
@@ -145,10 +172,11 @@ def run_pipeline(input_path: str, stages: List[str]) -> Dict[str, Any]:
 
     for st in stages:
         if st == 'preprocess':
-            current_images = stage_preprocess(current_images)
+            current_images = stage_preprocess(current_images, input_path)
             result['preprocess'] = {'count': len(current_images)}
         elif st == 'preocr':
-            preocr_info = stage_preocr(current_images)
+            # preocr 阶段使用 preprocessed 目录作为基准
+            preocr_info = stage_preocr(current_images, PREPROCESSED_DIR)
             result['preocr'] = preocr_info
             # 尝试收集 region 图（如果用户已事先跑过 preOCR）
             region_images = _collect_region_images(PREOCR_DIR)
@@ -163,9 +191,9 @@ def run_pipeline(input_path: str, stages: List[str]) -> Dict[str, Any]:
                     region_images = current_images
             seg_info = stage_segment(region_images)
             result['segment'] = {'processed': len(seg_info.get('processed', []))}
-        elif st == 'ocr':
-            ocr_stats = stage_ocr()
-            result['ocr'] = ocr_stats
+        elif st in ('ocr', 'postocr'):
+            post_stats = stage_postocr()
+            result['postocr'] = post_stats
         else:
             raise ValueError(f'未知阶段: {st}')
 
@@ -176,7 +204,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='简化流水线：根据阶段执行（配置来自 config.py）')
     parser.add_argument('input', help='输入文件或目录')
-    parser.add_argument('--stages', default='preprocess,segment,ocr', help='逗号分隔阶段序列: preprocess,preocr,segment,ocr')
+    parser.add_argument('--stages', default='preprocess,segment,postocr', help='逗号分隔阶段序列: preprocess,preocr,segment,postocr')
     parser.add_argument('--stage', default=None, help='单阶段快捷参数（等价于 --stages 单值），例如: --stage segment')
     parser.add_argument('--json', action='store_true', help='输出 JSON 结果')
     args = parser.parse_args()
