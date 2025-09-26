@@ -71,7 +71,7 @@ SEGMENT_REFINE_CONFIG = {
         'left': 2,
         'right': 2,
         'top': 4,
-        'bottom': 0,
+        'bottom': 2,
     },
     'final_pad': 0,             # 裁剪后的统一回填像素
     'debug_visualize': True,    # 是否输出调试图
@@ -87,30 +87,28 @@ PROJECTION_TRIM_CONFIG = {
     'primary_run_min_mass_ratio': 0.5,  # 主 run 需占投影质量的比例
     'primary_run_min_length_ratio': 0.3,# 主 run 需占宽度的比例
     'tighten_min_coverage': 0.01,       # 主 run 内重新贴边的阈值
-    'horizontal_trim_limit_ratio': 0.25,# 左右最大可裁比例（<=0 表示不限）
-    'horizontal_trim_limit_px': 0,      # 左右最大可裁像素
-    'vertical_trim_limit_ratio': 0.3,  # 上下最大可裁比例
-    'vertical_trim_limit_px': 0,        # 上下最大可裁像素
+    'left_trim_limit_ratio': 0.25,      # 左侧最大可裁比例（<=0 表示不限）
+    'right_trim_limit_ratio': 0.25,     # 右侧最大可裁比例（<=0 表示不限）
+    'top_trim_limit_ratio': 0.25,        # 上侧最大可裁比例（<=0 表示不限）
+    'bottom_trim_limit_ratio': 0.5,     # 下侧最大可裁比例（<=0 表示不限）
 }
 
 CC_FILTER_CONFIG = {
     'border_touch_margin': 1,           # 实际触边判定范围（像素）
     'edge_zone_margin': 2,              # 边缘区域判定范围（像素）
-    'border_touch_min_area_ratio': 0.01,  # 触边组件最小面积比例
+    'border_touch_min_area_ratio': 0.02,  # 触边组件最小面积比例
     'edge_zone_min_area_ratio': 0.01,     # 边缘区域组件最小面积比例
     'interior_min_area_ratio': 0.005,     # 内部组件最小面积比例
     'max_aspect_for_edge': 6.0,         # 边缘/触边组件最大长宽比
     'min_dim_px': 4,                    # 边缘/触边组件最小尺寸（像素）
 }
 
-EDGE_BREAKING_CONFIG = {
-    'enabled': True,                    # 是否启用边缘薄连接断开
-    'method': 'intelligent',            # 断连方法：intelligent / selective
-    'min_aspect_ratio': 3.0,            # 连通域长宽比阈值（>=此值才考虑断开）
-    'kernel_size': 2,                   # 形态学开运算核尺寸
-    'min_remaining_area': 10,           # 断开后剩余组件的最小面积
-    'edge_margin': 2,                   # 边缘判定的缓冲像素
-    'edge_ratio': 0.15,                 # 选择性方法：边缘区域占比
+BORDER_REMOVAL_CONFIG = {
+    'enabled': True,                     # 是否启用边框去除
+    'border_max_width_ratio': 0.25,     # 最大边框宽度占比（左右两侧检测范围）
+    'border_min_height_ratio': 0.4,     # 边框最小高度占比（垂直覆盖度阈值）
+    'border_intensity_ratio': 0.2,      # 边框强度阈值占比（相对于最大投影值）
+    'vertical_white_threshold': 0.001,  # 垂直白边检测阈值（只去除纯白区域）
 }
 
 NOISE_REMOVAL_CONFIG = {
@@ -169,7 +167,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
             'refine': SEGMENT_REFINE_CONFIG,
             'projection_trim': PROJECTION_TRIM_CONFIG,
             'cc_filter': CC_FILTER_CONFIG,
-            'edge_breaking': EDGE_BREAKING_CONFIG,
+            'border_removal': BORDER_REMOVAL_CONFIG,
             'noise_removal': NOISE_REMOVAL_CONFIG,
         },
         'postocr': {
@@ -184,7 +182,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
         'SEGMENT_REFINE_CONFIG': SEGMENT_REFINE_CONFIG,
         'PROJECTION_TRIM_CONFIG': PROJECTION_TRIM_CONFIG,
         'CC_FILTER_CONFIG': CC_FILTER_CONFIG,
-        'EDGE_BREAKING_CONFIG': EDGE_BREAKING_CONFIG,
+        'BORDER_REMOVAL_CONFIG': BORDER_REMOVAL_CONFIG,
         'NOISE_REMOVAL_CONFIG': NOISE_REMOVAL_CONFIG,
         'OCR_REMOTE_CONFIG': OCR_REMOTE_CONFIG,
         'ARK_VISION_CONFIG': ARK_VISION_CONFIG,
@@ -193,7 +191,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
 __all__ = [
     'PROJECT_ROOT','DATA_DIR','RAW_DIR','RESULTS_DIR','PREPROCESSED_DIR','SEGMENTS_DIR','POSTOCR_DIR','ANALYSIS_DIR','PREOCR_DIR',
     'PREPROCESS_STROKE_HEAL_CONFIG','PREPROCESS_INK_PRESERVE_CONFIG',
-    'SEGMENT_REFINE_CONFIG','PROJECTION_TRIM_CONFIG','CC_FILTER_CONFIG','EDGE_BREAKING_CONFIG','NOISE_REMOVAL_CONFIG',
+    'SEGMENT_REFINE_CONFIG','PROJECTION_TRIM_CONFIG','CC_FILTER_CONFIG','BORDER_REMOVAL_CONFIG','NOISE_REMOVAL_CONFIG',
     'OCR_REMOTE_CONFIG','ARK_VISION_CONFIG',
     'validate_config','config_summary'
 ]

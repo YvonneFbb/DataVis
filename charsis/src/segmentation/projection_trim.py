@@ -65,52 +65,55 @@ def _trim_axis(mask: np.ndarray, axis: int, params: Dict) -> Tuple[int, int]:
     if axis == 0:  # columns
         coverage = mask.sum(axis=0).astype(np.float32) / float(max(1, mask.shape[0]) * 255.0)
         total_len = mask.shape[1]
-        limit_ratio_key = 'horizontal_trim_limit_ratio'
-        limit_px_key = 'horizontal_trim_limit_px'
+        left_limit_key = 'left_trim_limit_ratio'
+        right_limit_key = 'right_trim_limit_ratio'
     else:  # rows
         coverage = mask.sum(axis=1).astype(np.float32) / float(max(1, mask.shape[1]) * 255.0)
         total_len = mask.shape[0]
-        limit_ratio_key = 'vertical_trim_limit_ratio'
-        limit_px_key = 'vertical_trim_limit_px'
+        left_limit_key = 'top_trim_limit_ratio'
+        right_limit_key = 'bottom_trim_limit_ratio'
 
     max_cov = coverage.max()
     if max_cov <= 0.0:
         return 0, total_len
     min_cov = max(float(params.get('run_min_coverage_abs', 0.005)),
                    float(params.get('run_min_coverage_ratio', 0.01)) * max_cov)
-    limit_ratio = float(params.get(limit_ratio_key, 1.0))
-    limit_px = int(params.get(limit_px_key, total_len))
-    ratio_bound = total_len if limit_ratio <= 0 else int(round(total_len * min(limit_ratio, 1.0)))
-    px_bound = total_len if limit_px <= 0 else limit_px
-    trim_limit = max(0, min(total_len, ratio_bound, px_bound))
+
+    # Separate limits for left/right (or top/bottom)
+    left_limit_ratio = float(params.get(left_limit_key, 1.0))
+    right_limit_ratio = float(params.get(right_limit_key, 1.0))
+    left_trim_limit = total_len if left_limit_ratio <= 0 else int(round(total_len * min(left_limit_ratio, 1.0)))
+    right_trim_limit = total_len if right_limit_ratio <= 0 else int(round(total_len * min(right_limit_ratio, 1.0)))
 
     runs = _find_runs(coverage, min_cov)
 
     if not runs:
-        # only空列，允许裁掉到限制位置
-        left = min(trim_limit, total_len)
-        right = max(left + 1, total_len - trim_limit)
+        # 空列，允许裁掉到限制位置
+        left = min(left_trim_limit, total_len)
+        right = max(left + 1, total_len - right_trim_limit)
         return max(0, min(total_len - 1, left)), min(total_len, max(left + 1, right))
 
     tighten_cov = float(params.get('tighten_min_coverage', 0.01))
 
+    # Find left boundary
     left_idx = 0
-    while left_idx < len(runs) and runs[left_idx][1] <= trim_limit:
+    while left_idx < len(runs) and runs[left_idx][1] <= left_trim_limit:
         left_idx += 1
     if left_idx >= len(runs):
         left_idx = len(runs) - 1
     left_candidate = runs[left_idx][0]
-    left = min(left_candidate, trim_limit)
+    left = min(left_candidate, left_trim_limit)
     while left < total_len and coverage[left] <= tighten_cov:
         left += 1
 
+    # Find right boundary
     right_idx = len(runs) - 1
-    while right_idx >= left_idx and runs[right_idx][0] >= max(0, total_len - trim_limit):
+    while right_idx >= left_idx and runs[right_idx][0] >= max(0, total_len - right_trim_limit):
         right_idx -= 1
     if right_idx < left_idx:
         right_idx = len(runs) - 1
     right_candidate = runs[right_idx][1]
-    right = max(total_len - trim_limit, right_candidate)
+    right = max(total_len - right_trim_limit, right_candidate)
     if right > total_len:
         right = total_len
     while right > 0 and coverage[right - 1] <= tighten_cov:
@@ -147,3 +150,4 @@ def trim_projection_from_bin(bin_img: np.ndarray, params: Dict) -> Tuple[int, in
     mask = (bin_img > 0).astype(np.uint8) * 255
     xl, xr, yt, yb = _trim_edges_by_projection(mask, params)
     return xl, xr, yt, yb
+

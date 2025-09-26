@@ -26,7 +26,7 @@ try:
     from src.config import (
         PREOCR_DIR, SEGMENTS_DIR,
         SEGMENT_REFINE_CONFIG, PROJECTION_TRIM_CONFIG, CC_FILTER_CONFIG,
-        EDGE_BREAKING_CONFIG, NOISE_REMOVAL_CONFIG,
+        BORDER_REMOVAL_CONFIG, NOISE_REMOVAL_CONFIG,
     )
 except Exception as e:
     raise RuntimeError(
@@ -35,8 +35,8 @@ except Exception as e:
 
 from src.segmentation.projection_trim import trim_projection_from_bin, binarize
 from src.segmentation.cc_filter import refine_binary_components
-from src.segmentation.edge_breaking import break_edge_adhesions
 from src.segmentation.noise_removal import remove_noise_patches
+from src.segmentation.border_removal import trim_border_from_bin
 
 
 def _ensure_dir(path: str) -> None:
@@ -50,16 +50,17 @@ def _render_combined_debug(roi_bgr: np.ndarray,
                            gray_original: np.ndarray,
                            gray_cleaned: np.ndarray,
                            bin_original: np.ndarray,
-                           bin_broken: np.ndarray,
                            bin_after: np.ndarray,
-                           xl: int, xr: int, yt: int, yb: int) -> np.ndarray:
-    """Render 4x4 panel: NOISE + BREAK + CC + PROJ rows."""
+                           crop_before_border: np.ndarray,
+                           crop_after_border: np.ndarray,
+                           xl_proj: int, xr_proj: int, yt_proj: int, yb_proj: int,
+                           xl_border: int, xr_border: int, yt_border: int, yb_border: int) -> np.ndarray:
+    """Render 1x4 panel: NOISE + CC + PROJ + BORDER rows."""
     h, w = roi_bgr.shape[:2]
     if h == 0 or w == 0:
         return roi_bgr.copy()
 
     mask_original = (bin_original > 0).astype(np.uint8)
-    mask_broken = (bin_broken > 0).astype(np.uint8)
     mask_after = (bin_after > 0).astype(np.uint8)
 
     panel_h = int(max(120, min(260, round(h * 0.8))))
@@ -97,10 +98,10 @@ def _render_combined_debug(roi_bgr: np.ndarray,
 
     # Projection overlay
     projection_overlay = masked_roi.copy()
-    cv2.line(projection_overlay, (max(0, int(xl)), 0), (max(0, int(xl)), h - 1), (0, 0, 255), 1)
-    cv2.line(projection_overlay, (max(0, int(xr - 1)), 0), (max(0, int(xr - 1)), h - 1), (0, 0, 255), 1)
-    cv2.line(projection_overlay, (0, max(0, int(yt))), (w - 1, max(0, int(yt))), (0, 0, 255), 1)
-    cv2.line(projection_overlay, (0, max(0, int(yb - 1))), (w - 1, max(0, int(yb - 1))), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (max(0, int(xl_proj)), 0), (max(0, int(xl_proj)), h - 1), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (max(0, int(xr_proj - 1)), 0), (max(0, int(xr_proj - 1)), h - 1), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (0, max(0, int(yt_proj))), (w - 1, max(0, int(yt_proj))), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (0, max(0, int(yb_proj - 1))), (w - 1, max(0, int(yb_proj - 1))), (0, 0, 255), 1)
     projection_panel = resize_panel(projection_overlay)
 
     # Projection histograms
@@ -114,8 +115,8 @@ def _render_combined_debug(roi_bgr: np.ndarray,
             bar = int(round(vp[sx] * (panel_h - 1)))
             if bar > 0:
                 v_panel[panel_h - bar:panel_h, col] = 0
-        xl_bar = int(round(max(0, xl) / max(1, w - 1) * max(0, hist_w - 1)))
-        xr_bar = int(round(max(0, xr - 1) / max(1, w - 1) * max(0, hist_w - 1)))
+        xl_bar = int(round(max(0, xl_proj) / max(1, w - 1) * max(0, hist_w - 1)))
+        xr_bar = int(round(max(0, xr_proj - 1) / max(1, w - 1) * max(0, hist_w - 1)))
         cv2.line(v_panel, (xl_bar, 0), (xl_bar, panel_h - 1), 128, 1)
         cv2.line(v_panel, (xr_bar, 0), (xr_bar, panel_h - 1), 128, 1)
     vertical_panel = cv2.cvtColor(v_panel, cv2.COLOR_GRAY2BGR)
@@ -129,11 +130,49 @@ def _render_combined_debug(roi_bgr: np.ndarray,
             bar = int(round(hp[sy] * (hist_w - 1)))
             if bar > 0:
                 h_panel[row, :bar] = 0
-        yt_bar = int(round(max(0, yt) / max(1, h - 1) * max(0, panel_h - 1)))
-        yb_bar = int(round(max(0, yb - 1) / max(1, h - 1) * max(0, panel_h - 1)))
+        yt_bar = int(round(max(0, yt_proj) / max(1, h - 1) * max(0, panel_h - 1)))
+        yb_bar = int(round(max(0, yb_proj - 1) / max(1, h - 1) * max(0, panel_h - 1)))
         cv2.line(h_panel, (0, yt_bar), (hist_w - 1, yt_bar), 128, 1)
         cv2.line(h_panel, (0, yb_bar), (hist_w - 1, yb_bar), 128, 1)
     horizontal_panel = cv2.cvtColor(h_panel, cv2.COLOR_GRAY2BGR)
+
+    # === Border removal row ===
+    # Create border removal visualization similar to PROJ
+    border_overlay = masked_roi.copy()
+    cv2.line(border_overlay, (max(0, int(xl_border)), 0), (max(0, int(xl_border)), h - 1), (255, 0, 0), 1)
+    cv2.line(border_overlay, (max(0, int(xr_border - 1)), 0), (max(0, int(xr_border - 1)), h - 1), (255, 0, 0), 1)
+    cv2.line(border_overlay, (0, max(0, int(yt_border))), (w - 1, max(0, int(yt_border))), (255, 0, 0), 1)
+    cv2.line(border_overlay, (0, max(0, int(yb_border - 1))), (w - 1, max(0, int(yb_border - 1))), (255, 0, 0), 1)
+    border_panel = resize_panel(border_overlay)
+
+    # Border horizontal projection analysis
+    border_region = bin_after[yt_proj:yb_proj, xl_proj:xr_proj] if xl_proj < xr_proj and yt_proj < yb_proj else np.zeros((1, 1), dtype=np.uint8)
+    border_h_panel = np.full((panel_h, hist_w), 255, dtype=np.uint8)
+    if border_region.size > 0:
+        border_hproj = border_region.sum(axis=0).astype(np.float32)
+        if border_hproj.size > 0 and border_hproj.max() > 0:
+            bhp = border_hproj / (border_hproj.max() + 1e-6)
+            for col in range(hist_w):
+                sx = int(round(col / max(1, hist_w - 1) * max(0, border_region.shape[1] - 1)))
+                if sx < bhp.size:
+                    bar = int(round(bhp[sx] * (panel_h - 1)))
+                    if bar > 0:
+                        border_h_panel[panel_h - bar:panel_h, col] = 0
+        # Mark border cuts with red lines
+        if border_region.shape[1] > 0:
+            left_cut_rel = xl_border - xl_proj
+            right_cut_rel = xr_border - xl_proj
+            left_bar = int(round(max(0, left_cut_rel) / max(1, border_region.shape[1] - 1) * max(0, hist_w - 1)))
+            right_bar = int(round(max(0, right_cut_rel - 1) / max(1, border_region.shape[1] - 1) * max(0, hist_w - 1)))
+            cv2.line(border_h_panel, (left_bar, 0), (left_bar, panel_h - 1), 0, 1)
+            cv2.line(border_h_panel, (right_bar, 0), (right_bar, panel_h - 1), 0, 1)
+    border_h_panel_bgr = cv2.cvtColor(border_h_panel, cv2.COLOR_GRAY2BGR)
+
+    # Show final crop result
+    if crop_after_border is not None and crop_after_border.size > 0:
+        crop_after_panel = cv2.resize(crop_after_border, (base_w, panel_h), interpolation=cv2.INTER_LINEAR)
+    else:
+        crop_after_panel = np.full((panel_h, base_w, 3), 250, dtype=np.uint8)
 
     # === Noise removal row ===
     # Show noise cleaning effect by highlighting differences
@@ -148,17 +187,6 @@ def _render_combined_debug(roi_bgr: np.ndarray,
     gray_original_panel = resize_panel(cv2.cvtColor(gray_original, cv2.COLOR_GRAY2BGR))
     gray_cleaned_panel = resize_panel(cv2.cvtColor(gray_cleaned, cv2.COLOR_GRAY2BGR))
 
-    # === Edge breaking row ===
-    breaking_overlay = roi_bgr.copy()
-    diff_mask = cv2.absdiff(mask_original, mask_broken)
-    breaking_overlay[mask_broken > 0] = [100, 255, 100]  # Green for remaining
-    breaking_overlay[diff_mask > 0] = [0, 100, 255]      # Orange for broken parts
-
-    breaking_overlay_panel = resize_panel(breaking_overlay)
-    mask_broken_panel = resize_panel(to_bgr(mask_broken), interp=cv2.INTER_NEAREST)
-
-    # Empty panel for edge breaking (no projections needed)
-    empty_panel = np.full((panel_h, base_w, 3), 250, dtype=np.uint8)
 
     # Labels
     label_w = max(60, hist_w // 4)
@@ -166,11 +194,11 @@ def _render_combined_debug(roi_bgr: np.ndarray,
     cc_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
     proj_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
     noise_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
-    break_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
+    border_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
     cv2.putText(cc_label, 'CC', (10, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (40, 40, 40), 2, cv2.LINE_AA)
     cv2.putText(proj_label, 'PROJ', (10, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (40, 40, 40), 2, cv2.LINE_AA)
     cv2.putText(noise_label, 'NOISE', (5, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (40, 40, 40), 2, cv2.LINE_AA)
-    cv2.putText(break_label, 'BREAK', (5, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.putText(border_label, 'BORDER', (2, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (40, 40, 40), 2, cv2.LINE_AA)
 
     def pad_to_width(img: np.ndarray, target_w: int) -> np.ndarray:
         h_, w_ = img.shape[:2]
@@ -180,13 +208,23 @@ def _render_combined_debug(roi_bgr: np.ndarray,
         pad_right = target_w - w_ - pad_left
         return cv2.copyMakeBorder(img, 0, 0, pad_left, pad_right, cv2.BORDER_CONSTANT, value=(255, 255, 255))
 
-    # Build 4 rows: NOISE, BREAK, CC, PROJ
-    rows = [
-        [add_border(noise_overlay_panel), add_border(gray_original_panel), add_border(gray_cleaned_panel), add_border(noise_label)],
-        [add_border(breaking_overlay_panel), add_border(mask_before_panel), add_border(mask_broken_panel), add_border(break_label)],
-        [add_border(cc_overlay_panel), add_border(mask_before_panel), add_border(mask_after_panel), add_border(cc_label)],
-        [add_border(projection_panel), add_border(vertical_panel), add_border(horizontal_panel), add_border(proj_label)]
-    ]
+    # Build 4 rows: NOISE, CC, PROJ, BORDER
+    try:
+        border_row = [add_border(border_panel), add_border(border_h_panel_bgr), add_border(crop_after_panel), add_border(border_label)]
+
+        rows = [
+            [add_border(noise_overlay_panel), add_border(gray_original_panel), add_border(gray_cleaned_panel), add_border(noise_label)],
+            [add_border(cc_overlay_panel), add_border(mask_before_panel), add_border(mask_after_panel), add_border(cc_label)],
+            [add_border(projection_panel), add_border(vertical_panel), add_border(horizontal_panel), add_border(proj_label)],
+            border_row
+        ]
+    except Exception as e:
+        # Fallback to 3 rows if border row fails
+        rows = [
+            [add_border(noise_overlay_panel), add_border(gray_original_panel), add_border(gray_cleaned_panel), add_border(noise_label)],
+            [add_border(cc_overlay_panel), add_border(mask_before_panel), add_border(mask_after_panel), add_border(cc_label)],
+            [add_border(projection_panel), add_border(vertical_panel), add_border(horizontal_panel), add_border(proj_label)]
+        ]
 
     grid_rows = []
     for row_panels in rows:
@@ -203,7 +241,11 @@ def _render_combined_debug(roi_bgr: np.ndarray,
             row_img = np.hstack([row_img, gap_col, panel])
         grid_rows.append(row_img)
 
-    return np.vstack(grid_rows)
+    try:
+        return np.vstack(grid_rows)
+    except Exception as e:
+        # Return first 3 rows if vstack fails
+        return np.vstack(grid_rows[:3])
 
 def run_on_image(image_path: str, output_dir: str, expected_text: str | None = None,
                  framework: str = 'livetext', recognition_level: str = 'accurate',
@@ -294,34 +336,67 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
             adaptive_C=int(PROJECTION_TRIM_CONFIG.get('adaptive_C', 3)),
         )
 
-        # Edge adhesion breaking (before CC filtering)
-        bin_broken = bin_before.copy()
-        if EDGE_BREAKING_CONFIG.get('enabled', True):
-            bin_broken = break_edge_adhesions(bin_broken, EDGE_BREAKING_CONFIG)
-
         # choose CC filtering according to mode
         if mode == 'projection_only':
-            bin_after = bin_broken.copy()  # skip CC filtering
+            bin_after = bin_before.copy()  # skip CC filtering
         else:
-            bin_after = bin_broken.copy()
+            bin_after = bin_before.copy()
             refine_binary_components(bin_after, CC_FILTER_CONFIG)
         if mode == 'cc_debug':
             # no projection trimming; use full ROI as crop
             xl, xr, yt, yb = 0, roi.shape[1], 0, roi.shape[0]
         else:
             xl, xr, yt, yb = trim_projection_from_bin(bin_after, PROJECTION_TRIM_CONFIG)
+
+        # Store projection coordinates for debug
+        xl_proj, xr_proj, yt_proj, yb_proj = xl, xr, yt, yb
+
+        # Border removal (after projection trimming)
+        xl_border, xr_border, yt_border, yb_border = xl, xr, yt, yb
+        if BORDER_REMOVAL_CONFIG.get('enabled', True):
+            # Apply border trimming to the projection-trimmed region
+            border_bin = bin_after[yt:yb, xl:xr]
+            xl_b, xr_b, yt_b, yb_b = trim_border_from_bin(border_bin, BORDER_REMOVAL_CONFIG)
+            # Adjust coordinates back to full ROI space
+            xl_border = xl + xl_b
+            xr_border = xl + (xr_b - xl_b)
+            yt_border = yt + yt_b
+            yb_border = yt + (yb_b - yt_b)
+
         fp = int(SEGMENT_REFINE_CONFIG.get('final_pad', 0))
-        xl = max(0, xl - fp); xr = min(roi.shape[1], xr + fp)
-        yt = max(0, yt - fp); yb = min(roi.shape[0], yb + fp)
-        rx, ry, rw, rh = x0 + int(xl), y0 + int(yt), max(1, int(xr - xl)), max(1, int(yb - yt))
+        xl_final = max(0, xl_border - fp)
+        xr_final = min(roi.shape[1], xr_border + fp)
+        yt_final = max(0, yt_border - fp)
+        yb_final = min(roi.shape[0], yb_border + fp)
+        rx, ry, rw, rh = x0 + int(xl_final), y0 + int(yt_final), max(1, int(xr_final - xl_final)), max(1, int(yb_final - yt_final))
         refined_boxes.append((rx, ry, rw, rh))
-        crop = img[ry:ry+rh, rx:rx+rw]
+
+        # Create final processed image: apply NOISE removal + CC filtering effects
+        # Start with noise-cleaned grayscale image
+        processed_gray = gray_cleaned.copy()
+
+        # Apply CC filtering effects by masking with bin_after
+        # Where bin_after is 0 (removed by CC), set to white background
+        cc_mask = (bin_after > 0)
+        processed_gray[~cc_mask] = 255
+
+        # Convert to BGR for final output
+        processed_roi = cv2.cvtColor(processed_gray, cv2.COLOR_GRAY2BGR)
+
+        # Create crops from processed image
+        crop_before_border = processed_roi[yt_proj:yb_proj, xl_proj:xr_proj]
+        crop_after_border = processed_roi[yt_final:yb_final, xl_final:xr_final]
+        crop = crop_after_border
+
         fname = f"char_{b['order']:04d}.png"
         cv2.imwrite(os.path.join(output_dir, fname), crop)
         if dbg_enabled:
             try:
-                # Pass all stages to show the complete pipeline
-                dbg_img = _render_combined_debug(roi, gray, gray_cleaned, bin_before, bin_broken, bin_after, int(xl), int(xr), int(yt), int(yb))
+                # Pass all stages to show the complete pipeline (4 stages: noise, cc, proj, border)
+                dbg_img = _render_combined_debug(roi, gray, gray_cleaned, bin_before, bin_after,
+                                                crop_before_border, crop_after_border,
+                                                int(xl_proj), int(xr_proj), int(yt_proj), int(yb_proj),
+                                                int(xl_border), int(xr_border), int(yt_border), int(yb_border))
                 dbg_name = f"{os.path.splitext(fname)[0]}_debug.png"
                 out_dbg = os.path.join(output_dir, dbg_dirname)
                 _ensure_dir(out_dbg)
