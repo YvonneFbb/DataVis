@@ -116,11 +116,11 @@ def stage_segment(region_images: List[str]) -> Dict[str, Any]:
         # out dir: segments/<dataset_or_misc>/<region_name>
         # 解析 dataset: 如果路径包含 /preocr/<ds>/region_images/region_xxx.jpg
         parts = img_path.split(os.sep)
-    try:
-        idx = parts.index('preocr')
-        dataset = parts[idx+1]
-    except ValueError:
-        dataset = 'misc'
+        try:
+            idx = parts.index('preocr')
+            dataset = parts[idx+1]
+        except ValueError:
+            dataset = 'misc'
         base = os.path.splitext(os.path.basename(img_path))[0]
         out_dir = os.path.join(SEGMENTS_DIR, dataset, base)
         os.makedirs(out_dir, exist_ok=True)

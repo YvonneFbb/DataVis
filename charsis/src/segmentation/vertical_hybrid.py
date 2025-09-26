@@ -26,7 +26,7 @@ try:
     from src.config import (
         PREOCR_DIR, SEGMENTS_DIR,
         SEGMENT_REFINE_CONFIG, PROJECTION_TRIM_CONFIG, CC_FILTER_CONFIG,
-        EDGE_BREAKING_CONFIG,
+        EDGE_BREAKING_CONFIG, NOISE_REMOVAL_CONFIG,
     )
 except Exception as e:
     raise RuntimeError(
@@ -36,6 +36,7 @@ except Exception as e:
 from src.segmentation.projection_trim import trim_projection_from_bin, binarize
 from src.segmentation.cc_filter import refine_binary_components
 from src.segmentation.edge_breaking import break_edge_adhesions
+from src.segmentation.noise_removal import remove_noise_patches
 
 
 def _ensure_dir(path: str) -> None:
@@ -46,11 +47,13 @@ def _ensure_dir(path: str) -> None:
 
 
 def _render_combined_debug(roi_bgr: np.ndarray,
+                           gray_original: np.ndarray,
+                           gray_cleaned: np.ndarray,
                            bin_original: np.ndarray,
                            bin_broken: np.ndarray,
                            bin_after: np.ndarray,
                            xl: int, xr: int, yt: int, yb: int) -> np.ndarray:
-    """Render 3x4 panel: 3 rows (Original/EdgeBreak/CC+Proj) x 4 cols (Overlay/Mask/VProj/HProj)."""
+    """Render 4x4 panel: NOISE + BREAK + CC + PROJ rows."""
     h, w = roi_bgr.shape[:2]
     if h == 0 or w == 0:
         return roi_bgr.copy()
@@ -59,109 +62,148 @@ def _render_combined_debug(roi_bgr: np.ndarray,
     mask_broken = (bin_broken > 0).astype(np.uint8)
     mask_after = (bin_after > 0).astype(np.uint8)
 
-    panel_h = int(max(100, min(200, round(h * 0.6))))
+    panel_h = int(max(120, min(260, round(h * 0.8))))
     scale = panel_h / float(max(1, h))
     base_w = max(1, int(round(w * scale)))
 
-    def resize_panel(img: np.ndarray, interp: int = cv2.INTER_LINEAR) -> np.ndarray:
-        return cv2.resize(img, (base_w, panel_h), interpolation=interp)
+    def resize_panel(img: np.ndarray, interp: int = cv2.INTER_LINEAR, target_w: int | None = None) -> np.ndarray:
+        if target_w is None:
+            target_w = base_w
+        return cv2.resize(img, (target_w, panel_h), interpolation=interp)
 
     def to_bgr(mask: np.ndarray) -> np.ndarray:
         vis = 255 - (mask.astype(np.uint8) * 255)
         return cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
 
-    def add_border(img: np.ndarray, pad: int = 1) -> np.ndarray:
-        return cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(200, 200, 200))
+    def add_border(img: np.ndarray, pad: int = 2) -> np.ndarray:
+        return cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255))
 
-    # === Row 1: Original Binary ===
-    original_overlay = roi_bgr.copy()
-    original_overlay[mask_original > 0] = [200, 200, 200]  # Gray overlay for original foreground
+    # === Original 2x4 layout (CC vs Projection) ===
+    # CC overlay and masks
+    masked_roi = np.full_like(roi_bgr, 255)
+    masked_roi[mask_after.astype(bool)] = roi_bgr[mask_after.astype(bool)]
+    cc_overlay = masked_roi.copy()
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask_original, connectivity=8)
+    if num > 1:
+        for i in range(1, num):
+            x, y, ww, hh, _area = stats[i]
+            kept = bool(mask_after[labels == i].any())
+            color = (0, 200, 0) if kept else (0, 0, 255)
+            cv2.rectangle(cc_overlay, (int(x), int(y)), (int(x + ww - 1), int(y + hh - 1)), color, 1)
 
-    orig_panels = [
-        resize_panel(original_overlay),
-        resize_panel(to_bgr(mask_original), cv2.INTER_NEAREST),
-        _create_projection_panel(mask_original, 'vertical', base_w, panel_h, 0, w),
-        _create_projection_panel(mask_original, 'horizontal', base_w, panel_h, 0, h)
-    ]
+    cc_overlay_panel = resize_panel(cc_overlay)
+    mask_before_panel = resize_panel(to_bgr(mask_original), interp=cv2.INTER_NEAREST)
+    mask_after_panel = resize_panel(to_bgr(mask_after), interp=cv2.INTER_NEAREST)
 
-    # === Row 2: Edge Breaking ===
+    # Projection overlay
+    projection_overlay = masked_roi.copy()
+    cv2.line(projection_overlay, (max(0, int(xl)), 0), (max(0, int(xl)), h - 1), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (max(0, int(xr - 1)), 0), (max(0, int(xr - 1)), h - 1), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (0, max(0, int(yt))), (w - 1, max(0, int(yt))), (0, 0, 255), 1)
+    cv2.line(projection_overlay, (0, max(0, int(yb - 1))), (w - 1, max(0, int(yb - 1))), (0, 0, 255), 1)
+    projection_panel = resize_panel(projection_overlay)
+
+    # Projection histograms
+    hist_w = base_w
+    v_panel = np.full((panel_h, hist_w), 255, dtype=np.uint8)
+    vproj = mask_after.sum(axis=0).astype(np.float32)
+    if vproj.size:
+        vp = vproj / (vproj.max() + 1e-6)
+        for col in range(hist_w):
+            sx = int(round(col / max(1, hist_w - 1) * max(0, w - 1)))
+            bar = int(round(vp[sx] * (panel_h - 1)))
+            if bar > 0:
+                v_panel[panel_h - bar:panel_h, col] = 0
+        xl_bar = int(round(max(0, xl) / max(1, w - 1) * max(0, hist_w - 1)))
+        xr_bar = int(round(max(0, xr - 1) / max(1, w - 1) * max(0, hist_w - 1)))
+        cv2.line(v_panel, (xl_bar, 0), (xl_bar, panel_h - 1), 128, 1)
+        cv2.line(v_panel, (xr_bar, 0), (xr_bar, panel_h - 1), 128, 1)
+    vertical_panel = cv2.cvtColor(v_panel, cv2.COLOR_GRAY2BGR)
+
+    h_panel = np.full((panel_h, hist_w), 255, dtype=np.uint8)
+    hproj = mask_after.sum(axis=1).astype(np.float32)
+    if hproj.size:
+        hp = hproj / (hproj.max() + 1e-6)
+        for row in range(panel_h):
+            sy = int(round(row / max(1, panel_h - 1) * max(0, h - 1)))
+            bar = int(round(hp[sy] * (hist_w - 1)))
+            if bar > 0:
+                h_panel[row, :bar] = 0
+        yt_bar = int(round(max(0, yt) / max(1, h - 1) * max(0, panel_h - 1)))
+        yb_bar = int(round(max(0, yb - 1) / max(1, h - 1) * max(0, panel_h - 1)))
+        cv2.line(h_panel, (0, yt_bar), (hist_w - 1, yt_bar), 128, 1)
+        cv2.line(h_panel, (0, yb_bar), (hist_w - 1, yb_bar), 128, 1)
+    horizontal_panel = cv2.cvtColor(h_panel, cv2.COLOR_GRAY2BGR)
+
+    # === Noise removal row ===
+    # Show noise cleaning effect by highlighting differences
+    noise_diff = cv2.absdiff(gray_original, gray_cleaned)
+    noise_overlay = cv2.cvtColor(gray_cleaned, cv2.COLOR_GRAY2BGR)
+
+    # Highlight removed noise in red
+    noise_mask = (noise_diff > 5).astype(np.uint8)  # Threshold for visible differences
+    noise_overlay[noise_mask > 0] = [0, 0, 255]  # Red for removed noise
+
+    noise_overlay_panel = resize_panel(noise_overlay)
+    gray_original_panel = resize_panel(cv2.cvtColor(gray_original, cv2.COLOR_GRAY2BGR))
+    gray_cleaned_panel = resize_panel(cv2.cvtColor(gray_cleaned, cv2.COLOR_GRAY2BGR))
+
+    # === Edge breaking row ===
     breaking_overlay = roi_bgr.copy()
     diff_mask = cv2.absdiff(mask_original, mask_broken)
-    breaking_overlay[mask_broken > 0] = [100, 255, 100]  # Green for remaining after breaking
+    breaking_overlay[mask_broken > 0] = [100, 255, 100]  # Green for remaining
     breaking_overlay[diff_mask > 0] = [0, 100, 255]      # Orange for broken parts
 
-    break_panels = [
-        resize_panel(breaking_overlay),
-        resize_panel(to_bgr(mask_broken), cv2.INTER_NEAREST),
-        _create_projection_panel(mask_broken, 'vertical', base_w, panel_h, 0, w),
-        _create_projection_panel(mask_broken, 'horizontal', base_w, panel_h, 0, h)
+    breaking_overlay_panel = resize_panel(breaking_overlay)
+    mask_broken_panel = resize_panel(to_bgr(mask_broken), interp=cv2.INTER_NEAREST)
+
+    # Empty panel for edge breaking (no projections needed)
+    empty_panel = np.full((panel_h, base_w, 3), 250, dtype=np.uint8)
+
+    # Labels
+    label_w = max(60, hist_w // 4)
+    label_color = (245, 245, 245)
+    cc_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
+    proj_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
+    noise_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
+    break_label = np.full((panel_h, label_w, 3), label_color, dtype=np.uint8)
+    cv2.putText(cc_label, 'CC', (10, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.putText(proj_label, 'PROJ', (10, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.putText(noise_label, 'NOISE', (5, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.putText(break_label, 'BREAK', (5, panel_h // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (40, 40, 40), 2, cv2.LINE_AA)
+
+    def pad_to_width(img: np.ndarray, target_w: int) -> np.ndarray:
+        h_, w_ = img.shape[:2]
+        if w_ >= target_w:
+            return img
+        pad_left = (target_w - w_) // 2
+        pad_right = target_w - w_ - pad_left
+        return cv2.copyMakeBorder(img, 0, 0, pad_left, pad_right, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+
+    # Build 4 rows: NOISE, BREAK, CC, PROJ
+    rows = [
+        [add_border(noise_overlay_panel), add_border(gray_original_panel), add_border(gray_cleaned_panel), add_border(noise_label)],
+        [add_border(breaking_overlay_panel), add_border(mask_before_panel), add_border(mask_broken_panel), add_border(break_label)],
+        [add_border(cc_overlay_panel), add_border(mask_before_panel), add_border(mask_after_panel), add_border(cc_label)],
+        [add_border(projection_panel), add_border(vertical_panel), add_border(horizontal_panel), add_border(proj_label)]
     ]
 
-    # === Row 3: CC + Projection Trim ===
-    final_overlay = roi_bgr.copy()
-    final_overlay[mask_after > 0] = [100, 100, 255]  # Blue for final result
-    # Draw trim boundaries
-    cv2.line(final_overlay, (max(0, int(xl)), 0), (max(0, int(xl)), h - 1), (255, 0, 0), 2)
-    cv2.line(final_overlay, (max(0, int(xr - 1)), 0), (max(0, int(xr - 1)), h - 1), (255, 0, 0), 2)
-    cv2.line(final_overlay, (0, max(0, int(yt))), (w - 1, max(0, int(yt))), (255, 0, 0), 2)
-    cv2.line(final_overlay, (0, max(0, int(yb - 1))), (w - 1, max(0, int(yb - 1))), (255, 0, 0), 2)
+    grid_rows = []
+    for row_panels in rows:
+        # Pad all panels in this row to same width
+        max_w = max(panel.shape[1] for panel in row_panels)
+        padded_panels = [pad_to_width(panel, max_w) for panel in row_panels]
 
-    final_panels = [
-        resize_panel(final_overlay),
-        resize_panel(to_bgr(mask_after), cv2.INTER_NEAREST),
-        _create_projection_panel(mask_after, 'vertical', base_w, panel_h, xl, xr),
-        _create_projection_panel(mask_after, 'horizontal', base_w, panel_h, yt, yb)
-    ]
+        # Combine with gaps
+        gap = 6
+        gap_col = np.full((padded_panels[0].shape[0], gap, 3), 255, dtype=np.uint8)
 
-    # === Combine into 3x4 grid ===
-    rows = []
-    for panels in [orig_panels, break_panels, final_panels]:
-        bordered_panels = [add_border(p) for p in panels]
-        row = np.hstack(bordered_panels)
-        rows.append(row)
+        row_img = padded_panels[0]
+        for panel in padded_panels[1:]:
+            row_img = np.hstack([row_img, gap_col, panel])
+        grid_rows.append(row_img)
 
-    return np.vstack(rows)
-
-
-def _create_projection_panel(mask: np.ndarray, direction: str, panel_w: int, panel_h: int,
-                           trim_start: int, trim_end: int) -> np.ndarray:
-    """Create a projection histogram panel."""
-    if direction == 'vertical':
-        proj = mask.sum(axis=0).astype(np.float32)
-        panel = np.full((panel_h, panel_w), 255, dtype=np.uint8)
-        if proj.size > 0:
-            proj_norm = proj / (proj.max() + 1e-6)
-            for col in range(panel_w):
-                src_col = int(col / max(1, panel_w - 1) * max(0, mask.shape[1] - 1))
-                bar_height = int(proj_norm[src_col] * (panel_h - 1))
-                if bar_height > 0:
-                    panel[panel_h - bar_height:panel_h, col] = 0
-            # Draw trim lines
-            if trim_start > 0:
-                line_x = int(trim_start / max(1, mask.shape[1] - 1) * max(0, panel_w - 1))
-                cv2.line(panel, (line_x, 0), (line_x, panel_h - 1), 128, 1)
-            if trim_end < mask.shape[1]:
-                line_x = int(trim_end / max(1, mask.shape[1] - 1) * max(0, panel_w - 1))
-                cv2.line(panel, (line_x, 0), (line_x, panel_h - 1), 128, 1)
-    else:  # horizontal
-        proj = mask.sum(axis=1).astype(np.float32)
-        panel = np.full((panel_h, panel_w), 255, dtype=np.uint8)
-        if proj.size > 0:
-            proj_norm = proj / (proj.max() + 1e-6)
-            for row in range(panel_h):
-                src_row = int(row / max(1, panel_h - 1) * max(0, mask.shape[0] - 1))
-                bar_width = int(proj_norm[src_row] * (panel_w - 1))
-                if bar_width > 0:
-                    panel[row, :bar_width] = 0
-            # Draw trim lines
-            if trim_start > 0:
-                line_y = int(trim_start / max(1, mask.shape[0] - 1) * max(0, panel_h - 1))
-                cv2.line(panel, (0, line_y), (panel_w - 1, line_y), 128, 1)
-            if trim_end < mask.shape[0]:
-                line_y = int(trim_end / max(1, mask.shape[0] - 1) * max(0, panel_h - 1))
-                cv2.line(panel, (0, line_y), (panel_w - 1, line_y), 128, 1)
-
-    return cv2.cvtColor(panel, cv2.COLOR_GRAY2BGR)
+    return np.vstack(grid_rows)
 
 def run_on_image(image_path: str, output_dir: str, expected_text: str | None = None,
                  framework: str = 'livetext', recognition_level: str = 'accurate',
@@ -239,8 +281,14 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
         if roi.size == 0:
             continue
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+        # Noise patch removal (before binarization)
+        gray_cleaned = gray.copy()
+        if NOISE_REMOVAL_CONFIG.get('enabled', True):
+            gray_cleaned = remove_noise_patches(gray_cleaned, NOISE_REMOVAL_CONFIG)
+
         bin_before = binarize(
-            gray,
+            gray_cleaned,
             mode=str(PROJECTION_TRIM_CONFIG.get('binarize', 'otsu')).lower(),
             adaptive_block=int(PROJECTION_TRIM_CONFIG.get('adaptive_block', 31)),
             adaptive_C=int(PROJECTION_TRIM_CONFIG.get('adaptive_C', 3)),
@@ -273,7 +321,7 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
         if dbg_enabled:
             try:
                 # Pass all stages to show the complete pipeline
-                dbg_img = _render_combined_debug(roi, bin_before, bin_broken, bin_after, int(xl), int(xr), int(yt), int(yb))
+                dbg_img = _render_combined_debug(roi, gray, gray_cleaned, bin_before, bin_broken, bin_after, int(xl), int(xr), int(yt), int(yb))
                 dbg_name = f"{os.path.splitext(fname)[0]}_debug.png"
                 out_dbg = os.path.join(output_dir, dbg_dirname)
                 _ensure_dir(out_dbg)
