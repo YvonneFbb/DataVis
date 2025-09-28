@@ -17,6 +17,7 @@ def trim_border_from_bin(binary_img: np.ndarray, params: Dict) -> Tuple[int, int
 
     This function first removes horizontal borders, then performs vertical
     projection analysis to tighten the top/bottom boundaries.
+    Supports multiple iterations to completely remove thick borders.
 
     Args:
         binary_img: Binary image (foreground=255, background=0)
@@ -29,29 +30,54 @@ def trim_border_from_bin(binary_img: np.ndarray, params: Dict) -> Tuple[int, int
     if h == 0 or w == 0:
         return 0, w, 0, h
 
-    # Step 1: Find border regions using horizontal projection
-    left_cut, right_cut = _find_border_cuts_by_projection(binary_img, params)
+    # Get iteration settings
+    max_iterations = int(params.get('max_iterations', 1))
 
-    # Convert cuts to trim coordinates
-    xl = left_cut
-    xr = w - right_cut
+    # Initialize coordinates
+    total_xl, total_xr = 0, w
+    current_img = binary_img.copy()
 
-    # Ensure valid horizontal coordinates
-    xl = max(0, min(w-1, xl))
-    xr = max(xl+1, min(w, xr))
+    # Iterate border removal
+    for iteration in range(max_iterations):
+        # Step 1: Find border regions using horizontal projection
+        left_cut, right_cut = _find_border_cuts_by_projection(current_img, params)
 
-    # Step 2: Perform vertical projection analysis on the horizontally trimmed region
-    if xl < xr:
-        trimmed_region = binary_img[:, xl:xr]
-        yt, yb = _find_vertical_trim_bounds(trimmed_region, params)
+        # If no border found in this iteration, break
+        if left_cut == 0 and right_cut == 0:
+            break
+
+        # Convert cuts to trim coordinates for this iteration
+        xl = left_cut
+        xr = current_img.shape[1] - right_cut
+
+        # Ensure valid horizontal coordinates
+        xl = max(0, min(current_img.shape[1]-1, xl))
+        xr = max(xl+1, min(current_img.shape[1], xr))
+
+        # Update total coordinates (accumulate cuts)
+        total_xl += xl
+        total_xr = total_xl + (xr - xl)
+
+        # Prepare for next iteration - crop the current image
+        if xl < xr and iteration < max_iterations - 1:
+            current_img = current_img[:, xl:xr]
+        else:
+            break
+
+    # Step 2: Perform vertical projection analysis on the final horizontally trimmed region
+    if total_xl < total_xr:
+        final_region = binary_img[:, total_xl:total_xr]
+        yt, yb = _find_vertical_trim_bounds(final_region, params)
     else:
         yt, yb = 0, h
 
-    # Ensure valid vertical coordinates
+    # Ensure valid coordinates
+    total_xl = max(0, min(w-1, total_xl))
+    total_xr = max(total_xl+1, min(w, total_xr))
     yt = max(0, min(h-1, yt))
     yb = max(yt+1, min(h, yb))
 
-    return xl, xr, yt, yb
+    return total_xl, total_xr, yt, yb
 
 
 def _find_border_cuts_by_projection(binary_img: np.ndarray, params: Dict) -> Tuple[int, int]:
@@ -71,8 +97,6 @@ def _find_border_cuts_by_projection(binary_img: np.ndarray, params: Dict) -> Tup
 
     # Parameters
     max_border_width_ratio = float(params.get('border_max_width_ratio', 0.2))    # 最大边框宽度占比
-    min_height_ratio = float(params.get('border_min_height_ratio', 0.6))         # 边框最小高度占比
-    intensity_threshold_ratio = float(params.get('border_intensity_ratio', 0.3)) # 强度阈值占比
 
     # Calculate horizontal projection (column-wise coverage)
     horizontal_projection = binary_img.sum(axis=0).astype(np.float32) / (h * 255.0)
@@ -81,113 +105,170 @@ def _find_border_cuts_by_projection(binary_img: np.ndarray, params: Dict) -> Tup
     if max_coverage <= 0.0:
         return 0, 0
 
-    # Intensity threshold for detecting high-coverage regions
-    intensity_threshold = max_coverage * intensity_threshold_ratio
-    min_height_threshold = min_height_ratio  # Coverage ratio threshold
-
     max_border_width = int(w * max_border_width_ratio)
 
     left_cut = 0
     right_cut = 0
 
-    # Check left edge for border
-    left_cut = _find_edge_border_cut(
-        horizontal_projection[:max_border_width],
-        intensity_threshold,
-        min_height_threshold,
-        is_left=True
-    )
+    # Check left edge for border using spike detection
+    left_projection = horizontal_projection[:max_border_width]
+    left_debug = _debug_border_detection(left_projection, params, is_left=True, total_width=w, global_max_coverage=max_coverage)
+    left_cut = left_debug.get('final_cut_pos', 0)
 
-    # Check right edge for border
-    right_cut = _find_edge_border_cut(
-        horizontal_projection[-max_border_width:],
-        intensity_threshold,
-        min_height_threshold,
-        is_left=False
-    )
+    # Check right edge for border using spike detection
+    right_projection = horizontal_projection[-max_border_width:]
+    right_debug = _debug_border_detection(right_projection, params, is_left=False, total_width=w, global_max_coverage=max_coverage)
+    right_cut = right_debug.get('final_cut_pos', 0)
 
     return left_cut, right_cut
 
 
-def _find_edge_border_cut(projection: np.ndarray, intensity_threshold: float,
-                         min_height_threshold: float, is_left: bool) -> int:
+def _debug_border_detection(projection: np.ndarray, params: Dict, is_left: bool, total_width: int = None, global_max_coverage: float = None) -> Dict:
     """
-    Find border cut position for one edge.
+    Debug function to analyze border detection process.
 
-    Args:
-        projection: Horizontal projection for the edge region
-        intensity_threshold: Minimum intensity to consider as border
-        min_height_threshold: Minimum height ratio for border
-        is_left: Whether this is left edge (True) or right edge (False)
-
-    Returns:
-        Number of pixels to cut from this edge
+    Returns detailed information about detection process for debugging.
     """
     if projection.size == 0:
-        return 0
+        return {'error': 'Empty projection'}
 
-    # Find regions with sufficient coverage (potential borders)
-    high_coverage_mask = projection >= intensity_threshold
+    max_coverage = projection.max() if projection.size > 0 else 0.0
+    if max_coverage <= 0.0:
+        return {'error': 'No coverage data'}
 
-    if not np.any(high_coverage_mask):
-        return 0
+    # Use global max coverage for threshold calculation if provided (to match main algorithm)
+    threshold_base = global_max_coverage if global_max_coverage is not None else max_coverage
+
+    # Calculate spike lengths based on total width if provided, otherwise use projection length
+    if total_width is not None:
+        spike_min_length = max(1, int(total_width * float(params.get('spike_min_length_ratio', 0.02))))
+        spike_max_length = max(spike_min_length, int(total_width * float(params.get('spike_max_length_ratio', 0.1))))
+    else:
+        spike_min_length = max(1, int(len(projection) * float(params.get('spike_min_length_ratio', 0.02))))
+        spike_max_length = max(spike_min_length, int(len(projection) * float(params.get('spike_max_length_ratio', 0.1))))
+
+    gradient_threshold = threshold_base * float(params.get('spike_gradient_threshold', 0.4))
+    prominence_ratio = float(params.get('spike_prominence_ratio', 0.6))
+    border_threshold = threshold_base * float(params.get('border_threshold_ratio', 0.5))
+    edge_tolerance = int(params.get('edge_tolerance', 8))
+
+    debug_info = {
+        'projection_length': len(projection),
+        'max_coverage': max_coverage,
+        'border_threshold': border_threshold,
+        'spike_min_length': spike_min_length,
+        'spike_max_length': spike_max_length,
+        'gradient_threshold': gradient_threshold,
+        'prominence_ratio': prominence_ratio,
+        'edge_tolerance': edge_tolerance,
+        'is_left': is_left,
+        'detection_attempts': [],
+        'final_cut_pos': 0,
+        'max_border_length': 0
+    }
+
+    best_cut_pos = 0
+    max_border_length = 0
 
     if is_left:
-        # For left edge, find the rightmost position of continuous high coverage from left
-        cut_pos = 0
-        consecutive_high = 0
-        max_consecutive = 0
-        best_cut_pos = 0
-
+        border_start = -1
         for i in range(len(projection)):
-            if high_coverage_mask[i]:
-                consecutive_high += 1
-                cut_pos = i + 1
+            if projection[i] >= border_threshold:
+                if border_start == -1:
+                    border_start = i
             else:
-                if consecutive_high > max_consecutive:
-                    max_consecutive = consecutive_high
-                    best_cut_pos = cut_pos
-                consecutive_high = 0
+                if border_start != -1:
+                    border_length = i - border_start
+                    border_avg = projection[border_start:i].mean()
 
-        # Check final consecutive region
-        if consecutive_high > max_consecutive:
-            best_cut_pos = cut_pos
+                    # Check if border is close enough to edge
+                    is_near_edge = border_start <= edge_tolerance
 
-        # Validate the cut region meets height requirement
-        if best_cut_pos > 0:
-            border_height = np.mean(projection[:best_cut_pos])
-            if border_height >= min_height_threshold:
-                return best_cut_pos
+                    lookahead_end = min(len(projection), i + border_length)
+                    content_avg = projection[i:lookahead_end].mean() if i < len(projection) else 0
+                    drop_magnitude = border_avg - content_avg
 
+                    gradient_ok = drop_magnitude >= gradient_threshold
+                    prominence_ok = drop_magnitude >= border_avg * prominence_ratio
+                    length_ok = spike_min_length <= border_length <= spike_max_length
+
+                    attempt = {
+                        'position': i,
+                        'border_start': border_start,
+                        'border_length': border_length,
+                        'border_avg': border_avg,
+                        'content_avg': content_avg,
+                        'drop_magnitude': drop_magnitude,
+                        'is_near_edge': is_near_edge,
+                        'length_ok': length_ok,
+                        'gradient_ok': gradient_ok,
+                        'prominence_ok': prominence_ok,
+                        'passed': is_near_edge and length_ok and gradient_ok and prominence_ok
+                    }
+                    # Add detailed projection values for debugging
+                    attempt['projection_values'] = projection[border_start:i].tolist() if border_length > 0 else []
+                    attempt['gradient_threshold_check'] = gradient_threshold
+                    attempt['prominence_threshold_check'] = border_avg * prominence_ratio if border_length > 0 else 0
+
+                    debug_info['detection_attempts'].append(attempt)
+
+                    if attempt['passed'] and border_length > max_border_length:
+                        max_border_length = border_length
+                        best_cut_pos = i
+
+                    border_start = -1
     else:
-        # For right edge, find the leftmost position of continuous high coverage from right
-        cut_pos = 0
-        consecutive_high = 0
-        max_consecutive = 0
-        best_cut_pos = 0
-
+        border_start = -1
         for i in range(len(projection) - 1, -1, -1):
-            if high_coverage_mask[i]:
-                consecutive_high += 1
-                cut_pos = len(projection) - i
+            if projection[i] >= border_threshold:
+                if border_start == -1:
+                    border_start = i
             else:
-                if consecutive_high > max_consecutive:
-                    max_consecutive = consecutive_high
-                    best_cut_pos = cut_pos
-                consecutive_high = 0
+                if border_start != -1:
+                    border_length = border_start - i
+                    border_avg = projection[i+1:border_start+1].mean()
 
-        # Check final consecutive region
-        if consecutive_high > max_consecutive:
-            best_cut_pos = cut_pos
+                    # Check if border is close enough to edge
+                    distance_from_edge = len(projection) - 1 - border_start
+                    is_near_edge = distance_from_edge <= edge_tolerance
 
-        # Validate the cut region meets height requirement
-        if best_cut_pos > 0:
-            start_pos = len(projection) - best_cut_pos
-            border_height = np.mean(projection[start_pos:])
-            if border_height >= min_height_threshold:
-                return best_cut_pos
+                    lookahead_start = max(0, i - border_length + 1)
+                    content_avg = projection[lookahead_start:i+1].mean() if i >= 0 else 0
+                    drop_magnitude = border_avg - content_avg
 
-    return 0
+                    gradient_ok = drop_magnitude >= gradient_threshold
+                    prominence_ok = drop_magnitude >= border_avg * prominence_ratio
+                    length_ok = spike_min_length <= border_length <= spike_max_length
+
+                    attempt = {
+                        'position': i,
+                        'border_start': border_start,
+                        'border_length': border_length,
+                        'border_avg': border_avg,
+                        'content_avg': content_avg,
+                        'drop_magnitude': drop_magnitude,
+                        'is_near_edge': is_near_edge,
+                        'length_ok': length_ok,
+                        'gradient_ok': gradient_ok,
+                        'prominence_ok': prominence_ok,
+                        'passed': is_near_edge and length_ok and gradient_ok and prominence_ok
+                    }
+                    # Add detailed projection values for debugging
+                    attempt['projection_values'] = projection[i+1:border_start+1].tolist() if border_length > 0 else []
+                    attempt['gradient_threshold_check'] = gradient_threshold
+                    attempt['prominence_threshold_check'] = border_avg * prominence_ratio if border_length > 0 else 0
+
+                    debug_info['detection_attempts'].append(attempt)
+
+                    if attempt['passed'] and border_length > max_border_length:
+                        max_border_length = border_length
+                        best_cut_pos = len(projection) - border_start
+
+                    border_start = -1
+
+    debug_info['final_cut_pos'] = best_cut_pos
+    debug_info['max_border_length'] = max_border_length
+    return debug_info
 
 
 def _find_vertical_trim_bounds(binary_img: np.ndarray, params: Dict) -> Tuple[int, int]:
