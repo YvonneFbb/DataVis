@@ -82,49 +82,49 @@ def _create_border_projection_viz(border_region: np.ndarray, params: Dict, max_h
     viz_height = max_height
     viz_img = np.full((viz_height, viz_width, 3), 255, dtype=np.uint8)
 
-    # Scale projection to fit
+    # Scale projection to fit (optimized to use more space)
     if len(bhp_coverage) > 0:
         scale_x = viz_width / len(bhp_coverage)
-        proj_height = int(viz_height * 0.8)  # Leave space for labels
+        proj_height = int(viz_height * 0.95)  # Further increased to use 95% of space
 
         # Draw projection bars
         for i, val in enumerate(bhp_coverage):
             x = int(i * scale_x)
             bar_height = int(val / max_coverage * proj_height) if max_coverage > 0 else 0
-            y_start = viz_height - 20 - bar_height
-            y_end = viz_height - 20
+            y_start = viz_height - 3 - bar_height  # Minimal bottom margin
+            y_end = viz_height - 3
 
             if bar_height > 0:
                 cv2.rectangle(viz_img, (x, y_start), (min(x+int(scale_x)+1, viz_width-1), y_end), (128, 128, 128), -1)
 
-        # Draw detection zones
+        # Draw detection zones (optimized positioning)
         left_zone_end = int(max_width * scale_x)
         right_zone_start = viz_width - int(max_width * scale_x)
 
         # Left zone
-        cv2.rectangle(viz_img, (0, 10), (left_zone_end, 30), (255, 0, 0), 2)
-        cv2.putText(viz_img, "LEFT ZONE", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+        cv2.rectangle(viz_img, (0, 2), (left_zone_end, 18), (255, 0, 0), 2)
+        cv2.putText(viz_img, "LEFT ZONE", (2, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 0, 0), 1)
 
         # Right zone
         if right_zone_start > left_zone_end:
-            cv2.rectangle(viz_img, (right_zone_start, 10), (viz_width-1, 30), (255, 0, 0), 2)
-            cv2.putText(viz_img, "RIGHT ZONE", (right_zone_start+5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+            cv2.rectangle(viz_img, (right_zone_start, 2), (viz_width-1, 18), (255, 0, 0), 2)
+            cv2.putText(viz_img, "RIGHT ZONE", (right_zone_start+2, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 0, 0), 1)
 
         # Draw threshold line
-        threshold_y = viz_height - 20 - int(border_threshold / max_coverage * proj_height) if max_coverage > 0 else viz_height - 20
+        threshold_y = viz_height - 8 - int(border_threshold / max_coverage * proj_height) if max_coverage > 0 else viz_height - 8
         cv2.line(viz_img, (0, threshold_y), (viz_width-1, threshold_y), (0, 255, 0), 2)
-        cv2.putText(viz_img, f"Threshold: {border_threshold:.3f}", (5, threshold_y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
+        cv2.putText(viz_img, f"Threshold: {border_threshold:.3f}", (2, threshold_y-3), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
 
         # Draw actual border cut positions
         if xl_cut > 0:
             xl_viz = int(xl_cut * scale_x)
-            cv2.line(viz_img, (xl_viz, 35), (xl_viz, viz_height-25), (0, 0, 255), 2)
-            cv2.putText(viz_img, f"L:{xl_cut}", (xl_viz+2, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1)
+            cv2.line(viz_img, (xl_viz, 22), (xl_viz, viz_height-5), (0, 0, 255), 2)
+            cv2.putText(viz_img, f"L:{xl_cut}", (xl_viz+1, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.28, (0, 0, 255), 1)
 
         if xr_cut < border_region.shape[1]:
             xr_viz = int(xr_cut * scale_x)
-            cv2.line(viz_img, (xr_viz, 35), (xr_viz, viz_height-25), (0, 0, 255), 2)
-            cv2.putText(viz_img, f"R:{xr_cut}", (max(0, xr_viz-25), 50), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1)
+            cv2.line(viz_img, (xr_viz, 22), (xr_viz, viz_height-5), (0, 0, 255), 2)
+            cv2.putText(viz_img, f"R:{xr_cut}", (max(0, xr_viz-20), 32), cv2.FONT_HERSHEY_SIMPLEX, 0.28, (0, 0, 255), 1)
 
     return viz_img
 
@@ -132,213 +132,204 @@ def _create_border_projection_viz(border_region: np.ndarray, params: Dict, max_h
 def _create_border_debug_image(border_region: np.ndarray,
                               xl_border: int, xr_border: int,
                               xl_proj: int, xr_proj: int,
-                              params: Dict) -> np.ndarray:
+                              params: Dict,
+                              yt_border: int = 0, yb_border: int = 0) -> np.ndarray:
     """
-    Create a dedicated border detection debug image.
-
-    Args:
-        border_region: The binary region after projection trimming
-        xl_border, xr_border: Border detection results
-        xl_proj, xr_proj: Projection trimming results
-        params: Border removal configuration
-
-    Returns:
-        Debug image showing border detection process
+    Create a comprehensive border detection debug image with both horizontal and vertical analysis.
     """
     if border_region.size == 0:
-        return np.full((400, 800, 3), 255, dtype=np.uint8)
+        return np.full((800, 1200, 3), 255, dtype=np.uint8)
 
-    debug_width = 800
-    debug_height = 800  # Increase height to fit all content
+    debug_width = 1200
+    debug_height = 800
     debug_img = np.full((debug_height, debug_width, 3), 255, dtype=np.uint8)
 
-    # Calculate projections
-    border_hproj = border_region.sum(axis=0).astype(np.float32)
-    if border_hproj.size == 0 or border_hproj.max() == 0:
-        cv2.putText(debug_img, "No projection data", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        return debug_img
+    h, w = border_region.shape
 
-    bhp_coverage = border_hproj / (border_region.shape[0] * 255.0)  # Actual coverage ratio
-    max_coverage = bhp_coverage.max()
+    # === Title ===
+    cv2.putText(debug_img, "BORDER DETECTION ANALYSIS", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
 
-    # Get debug info for both edges
-    max_width = int(border_region.shape[1] * params.get('border_max_width_ratio', 0.2))
-    debug_left = {}
-    debug_right = {}
+    # Draw separator line under title
+    cv2.line(debug_img, (10, 50), (debug_width - 10, 50), (200, 200, 200), 2)
 
-    if max_width > 0:
-        # Generate debug info using the same projection as main algorithm would use
-        # Main algorithm calculates projection from the actual binary image being processed
-        actual_hproj = border_region.sum(axis=0).astype(np.float32) / (border_region.shape[0] * 255.0)
-        actual_max_coverage = actual_hproj.max() if actual_hproj.size > 0 else 0.0
+    # === Left Half: Horizontal Analysis ===
+    left_w = debug_width // 2 - 40
+    _draw_horizontal_border_analysis(debug_img, border_region, xl_border, xr_border, params,
+                                   start_x=20, start_y=80, width=left_w, height=320)
 
-        left_proj = actual_hproj[:max_width]
-        right_proj = actual_hproj[-max_width:]
-        debug_left = _debug_border_detection(left_proj, params, is_left=True, total_width=border_region.shape[1], global_max_coverage=actual_max_coverage)
-        debug_right = _debug_border_detection(right_proj, params, is_left=False, total_width=border_region.shape[1], global_max_coverage=actual_max_coverage)
-
-        # Store projection info for later display
-        left_max = left_proj.max() if len(left_proj) > 0 else 0
-        right_max = right_proj.max() if len(right_proj) > 0 else 0
-
-    # Draw projection histogram (top section)
-    hist_height = 200
-    hist_start_y = 50
-    hist_width = min(700, border_region.shape[1] * 2)  # Scale for visibility
-
-    # Draw projection bars
-    for i in range(border_region.shape[1]):
-        if i < len(bhp_coverage):
-            bar_height = int(bhp_coverage[i] * hist_height)
-            x_pos = 50 + int(i * hist_width / border_region.shape[1])
-            if bar_height > 0:
-                cv2.rectangle(debug_img,
-                            (x_pos, hist_start_y + hist_height - bar_height),
-                            (x_pos + 1, hist_start_y + hist_height),
-                            (100, 100, 100), -1)
-
-    # Mark detection zones
-    left_zone_end = 50 + int(max_width * hist_width / border_region.shape[1])
-    right_zone_start = 50 + int((border_region.shape[1] - max_width) * hist_width / border_region.shape[1])
-
-    # Left detection zone
-    cv2.rectangle(debug_img, (50, hist_start_y), (left_zone_end, hist_start_y + hist_height), (255, 200, 200), 2)
-    cv2.putText(debug_img, "LEFT ZONE", (55, hist_start_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-
-    # Right detection zone
-    cv2.rectangle(debug_img, (right_zone_start, hist_start_y), (50 + hist_width, hist_start_y + hist_height), (200, 200, 255), 2)
-    cv2.putText(debug_img, "RIGHT ZONE", (right_zone_start + 5, hist_start_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-
-    # Mark border threshold line
-    threshold_y = hist_start_y + hist_height - int(max_coverage * 0.5 * hist_height)
-    cv2.line(debug_img, (50, threshold_y), (50 + hist_width, threshold_y), (0, 255, 0), 1)
-    cv2.putText(debug_img, f"Border Threshold: {max_coverage * 0.5:.3f}",
-                (50 + hist_width + 10, threshold_y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-
-    # Mark cut positions
-    left_cut_rel = xl_border - xl_proj
-    right_cut_rel = xr_border - xl_proj
-
-    if left_cut_rel > 0:
-        cut_x = 50 + int(left_cut_rel * hist_width / border_region.shape[1])
-        cv2.line(debug_img, (cut_x, hist_start_y), (cut_x, hist_start_y + hist_height), (255, 0, 0), 2)
-        cv2.putText(debug_img, f"L_CUT: {left_cut_rel}", (cut_x + 5, hist_start_y + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-
-    if right_cut_rel < border_region.shape[1]:
-        cut_x = 50 + int(right_cut_rel * hist_width / border_region.shape[1])
-        cv2.line(debug_img, (cut_x, hist_start_y), (cut_x, hist_start_y + hist_height), (0, 0, 255), 2)
-        cv2.putText(debug_img, f"R_CUT: {border_region.shape[1] - right_cut_rel}", (cut_x - 60, hist_start_y + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
-    # Display detection parameters (bottom section)
-    text_start_y = 300
-    line_height = 25
-
-    cv2.putText(debug_img, "BORDER DETECTION PARAMETERS:", (20, text_start_y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-
-    param_texts = [
-        f"Region Width: {border_region.shape[1]}px, Detection Zone: {max_width}px ({params.get('border_max_width_ratio', 0.2)*100:.1f}%)",
-        f"Max Coverage: {max_coverage:.4f}",
-        f"Border Threshold (50%): {max_coverage * 0.5:.4f}",
-        f"Spike Min Length: {params.get('spike_min_length_ratio', 0.02)*100:.1f}% * {border_region.shape[1]}px (total) = {int(border_region.shape[1] * params.get('spike_min_length_ratio', 0.02))}px",
-        f"Spike Max Length: {params.get('spike_max_length_ratio', 0.1)*100:.1f}% * {border_region.shape[1]}px (total) = {int(border_region.shape[1] * params.get('spike_max_length_ratio', 0.1))}px",
-        f"Gradient Threshold: {params.get('spike_gradient_threshold', 0.2)*100:.1f}% * {max_coverage:.3f} = {max_coverage * params.get('spike_gradient_threshold', 0.2):.4f}",
-        f"Prominence Ratio: {params.get('spike_prominence_ratio', 0.2)*100:.1f}%"
-    ]
-
-    for i, text in enumerate(param_texts):
-        cv2.putText(debug_img, text, (20, text_start_y + 30 + i * line_height),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-
-    # Display detection results
-    result_start_y = text_start_y + 180  # Reduce gap
-    cv2.putText(debug_img, "DETECTION RESULTS:", (20, result_start_y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-
-    # Left side results
-    left_y = result_start_y + 30
-    if debug_left.get('detection_attempts'):
-        cv2.putText(debug_img, f"LEFT: {len(debug_left['detection_attempts'])} attempts, cut at {debug_left['final_cut_pos']}",
-                    (20, left_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-
-        for i, attempt in enumerate(debug_left['detection_attempts'][:2]):  # Show first 2 attempts with details
-            status = "PASS" if attempt['passed'] else "FAIL"
-            detail_text = f"  Attempt {i+1}: pos={attempt['position']}, len={attempt['border_length']}, drop={attempt['drop_magnitude']:.4f} - {status}"
-            cv2.putText(debug_img, detail_text, (30, left_y + 20 + i * 80),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 0, 0), 1)
-
-            # Show detailed condition breakdown
-            proj_max = max(attempt.get('projection_values', [0])) if attempt.get('projection_values') else 0
-            conditions = [
-                f"    proj_max: {proj_max:.3f} >= border_thresh: {debug_left.get('border_threshold', 0):.3f}",
-                f"    near_edge: {attempt.get('is_near_edge', False)} (start: {attempt.get('border_start', 0)})",
-                f"    len: {attempt.get('length_ok', False)} grad: {attempt.get('gradient_ok', False)} prom: {attempt.get('prominence_ok', False)}"
-            ]
-            for j, cond in enumerate(conditions):
-                cv2.putText(debug_img, cond, (30, left_y + 35 + i * 80 + j * 15),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.3, (100, 0, 0), 1)
-
-        left_bottom = left_y + 20 + len(debug_left.get('detection_attempts', [])) * 80
-    else:
-        cv2.putText(debug_img, "LEFT: No attempts", (20, left_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-        left_bottom = left_y
-
-    # Right side results - start after left results with spacing
-    right_y = max(left_bottom + 40, result_start_y + 100)
-    cv2.putText(debug_img, "RIGHT DEBUG STATUS:", (20, right_y),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
-    right_detail_y = right_y + 25
-    if debug_right:
-        if 'error' in debug_right:
-            debug_status = f"Error: {debug_right['error']}"
-            cv2.putText(debug_img, debug_status, (20, right_detail_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            right_detail_y += 25
-        elif debug_right.get('detection_attempts'):
-            cv2.putText(debug_img, f"{len(debug_right['detection_attempts'])} attempts, cut at {debug_right['final_cut_pos']}",
-                        (20, right_detail_y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            right_detail_y += 25
-            for i, attempt in enumerate(debug_right['detection_attempts'][:2]):  # Show first 2 attempts with details
-                status = "PASS" if attempt['passed'] else "FAIL"
-                detail_text = f"  Attempt {i+1}: pos={attempt['position']}, len={attempt['border_length']}, drop={attempt['drop_magnitude']:.4f} - {status}"
-                cv2.putText(debug_img, detail_text, (30, right_detail_y),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 150), 1)
-                right_detail_y += 20
-
-                # Show detailed condition breakdown
-                proj_max = max(attempt.get('projection_values', [0])) if attempt.get('projection_values') else 0
-                conditions = [
-                    f"    proj_max: {proj_max:.3f} >= border_thresh: {debug_right.get('border_threshold', 0):.3f}",
-                    f"    near_edge: {attempt.get('is_near_edge', False)} (start: {attempt.get('border_start', 0)})",
-                    f"    len: {attempt.get('length_ok', False)} grad: {attempt.get('gradient_ok', False)} prom: {attempt.get('prominence_ok', False)}"
-                ]
-                for j, cond in enumerate(conditions):
-                    cv2.putText(debug_img, cond, (30, right_detail_y),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 100), 1)
-                    right_detail_y += 15
-                right_detail_y += 10  # Extra spacing between attempts
-        else:
-            debug_status = f"No attempts (max_cov: {debug_right.get('max_coverage', 0):.3f}, len: {debug_right.get('projection_length', 0)})"
-            cv2.putText(debug_img, debug_status, (20, right_detail_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            right_detail_y += 25
-
-    else:
-        cv2.putText(debug_img, "Empty debug_right object", (20, right_detail_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
-    # Add projection info at bottom (moved from top to avoid blocking histogram)
-    if max_width > 0:
-        cv2.putText(debug_img, f"Projection Info: Left len={len(left_proj)}, Right len={len(right_proj)}",
-                    (20, debug_height - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-        cv2.putText(debug_img, f"Max Coverage: Left={left_max:.3f}, Right={right_max:.3f}",
-                    (20, debug_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+    # === Right Half: Vertical Analysis ===
+    right_start_x = debug_width // 2 + 20
+    _draw_vertical_border_analysis(debug_img, border_region, yt_border, yb_border, params,
+                                 start_x=right_start_x, start_y=80, width=left_w, height=320)
 
     return debug_img
+
+
+def _draw_horizontal_border_analysis(debug_img: np.ndarray, border_region: np.ndarray,
+                                   xl_border: int, xr_border: int, params: Dict,
+                                   start_x: int, start_y: int, width: int, height: int):
+    """Draw horizontal border detection analysis with clear layout."""
+    h, w = border_region.shape
+
+    # Title
+    cv2.putText(debug_img, "HORIZONTAL ANALYSIS", (start_x, start_y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+
+    # Calculate projection
+    hproj = border_region.sum(axis=0).astype(np.float32) / (h * 255.0)
+    max_cov = hproj.max() if hproj.size > 0 else 0.0
+
+    # Projection visualization area (optimized height to use more space)
+    proj_height = 200  # Increased from 150 to 200
+    proj_area_y = start_y + 10  # Moved up to use more space
+    scale_x = (width - 30) / max(1, len(hproj))  # Reduced margin
+
+    # Draw background for projection area
+    cv2.rectangle(debug_img, (start_x + 15, proj_area_y),
+                  (start_x + width - 15, proj_area_y + proj_height), (245, 245, 245), -1)
+
+    # Draw projection bars
+    for i, cov in enumerate(hproj):
+        x = start_x + 15 + int(i * scale_x)
+        bar_h = int(cov / max(max_cov, 1e-6) * (proj_height - 15))  # More space for bars
+        y_start = proj_area_y + proj_height - 10 - bar_h
+        cv2.rectangle(debug_img, (x, y_start),
+                     (x + max(1, int(scale_x)), proj_area_y + proj_height - 10), (80, 80, 80), -1)
+
+    # Detection zones with clear visualization
+    max_width = int(w * params.get('border_max_width_ratio', 0.2))
+    left_zone_end = start_x + 15 + int(max_width * scale_x)
+    right_zone_start = start_x + 15 + int((w - max_width) * scale_x)
+
+    # Draw detection zones with transparency effect
+    cv2.rectangle(debug_img, (start_x + 15, proj_area_y),
+                  (left_zone_end, proj_area_y + proj_height), (0, 0, 255), 2)
+    cv2.rectangle(debug_img, (right_zone_start, proj_area_y),
+                  (start_x + width - 15, proj_area_y + proj_height), (255, 0, 0), 2)
+
+    # Zone labels without background
+    cv2.putText(debug_img, "LEFT", (start_x + 25, proj_area_y + 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+    cv2.putText(debug_img, "RIGHT", (right_zone_start + 5, proj_area_y + 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+
+    # Threshold line with clear label
+    threshold = max_cov * params.get('border_threshold_ratio', 0.5)
+    threshold_y = proj_area_y + proj_height - 10 - int(threshold / max(max_cov, 1e-6) * (proj_height - 15))
+    cv2.line(debug_img, (start_x + 15, threshold_y), (start_x + width - 15, threshold_y), (0, 255, 0), 2)
+
+    # Threshold label without background
+    thresh_text = f"Threshold: {threshold:.3f}"
+    cv2.putText(debug_img, thresh_text, (start_x + 5, threshold_y - 5),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+
+    # Cut markers without background
+    if xl_border > 0:
+        cut_x = start_x + 15 + int(xl_border * scale_x)
+        cv2.line(debug_img, (cut_x, proj_area_y), (cut_x, proj_area_y + proj_height), (255, 0, 255), 3)
+        cv2.putText(debug_img, f"L:{xl_border}", (cut_x + 2, proj_area_y + proj_height + 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 255), 1)
+
+    if xr_border < w:
+        cut_x = start_x + 15 + int(xr_border * scale_x)
+        cv2.line(debug_img, (cut_x, proj_area_y), (cut_x, proj_area_y + proj_height), (255, 0, 255), 3)
+        cv2.putText(debug_img, f"R:{w-xr_border}", (cut_x - 25, proj_area_y + proj_height + 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 255), 1)
+
+    # Parameters section with clear separation (adjusted for smaller space)
+    info_y = proj_area_y + proj_height + 30
+    cv2.line(debug_img, (start_x, info_y - 5), (start_x + width, info_y - 5), (200, 200, 200), 1)
+
+    cv2.putText(debug_img, "PARAMETERS:", (start_x, info_y + 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 2)
+    cv2.putText(debug_img, f"Width: {w}px | Coverage: {max_cov:.3f}",
+                (start_x, info_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
+    cv2.putText(debug_img, f"Zone: {max_width}px ({params.get('border_max_width_ratio', 0.2)*100:.0f}%) | Thresh: {params.get('border_threshold_ratio', 0.5)*100:.0f}%",
+                (start_x, info_y + 45), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
+
+
+def _draw_vertical_border_analysis(debug_img: np.ndarray, border_region: np.ndarray,
+                                 yt_border: int, yb_border: int, params: Dict,
+                                 start_x: int, start_y: int, width: int, height: int):
+    """Draw vertical border detection analysis with clear layout."""
+    h, w = border_region.shape
+
+    # Title
+    cv2.putText(debug_img, "VERTICAL ANALYSIS", (start_x, start_y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+
+    # Calculate vertical projection
+    vproj = border_region.sum(axis=1).astype(np.float32) / (w * 255.0)
+    max_cov = vproj.max() if vproj.size > 0 else 0.0
+
+    # Projection visualization area (optimized width to use more space)
+    proj_width = 220  # Increased from 150 to 220
+    proj_area_x = start_x + 10  # Moved left to use more space
+    scale_y = (height - 60) / max(1, len(vproj))  # Reduced bottom margin
+
+    # Draw background for projection area
+    cv2.rectangle(debug_img, (proj_area_x, start_y + 10),
+                  (proj_area_x + proj_width, start_y + height - 30), (245, 245, 245), -1)
+
+    # Draw projection bars (horizontal bars representing vertical projection)
+    for i, cov in enumerate(vproj):
+        y = start_y + 10 + int(i * scale_y)
+        bar_w = int(cov / max(max_cov, 1e-6) * (proj_width - 15))  # More space for bars
+        cv2.rectangle(debug_img, (proj_area_x + 10, y),
+                     (proj_area_x + 10 + bar_w, y + max(1, int(scale_y))), (80, 80, 80), -1)
+
+    # Get vertical detection parameters
+    v_detection = params.get('vertical_detection_range', {})
+    v_cuts = params.get('vertical_cut_limits', {})
+    top_detection_ratio = v_detection.get('top_ratio', 0.3)
+    bottom_detection_ratio = v_detection.get('bottom_ratio', 0.3)
+
+    # Detection zones with correct positioning
+    # Top zone: from top of the image, height = top_detection_ratio * h
+    top_zone_height = int(h * top_detection_ratio * scale_y)
+    top_zone_start = start_y + 10
+    top_zone_end = top_zone_start + top_zone_height
+
+    # Bottom zone: from bottom of the image upward, height = bottom_detection_ratio * h
+    bottom_zone_height = int(h * bottom_detection_ratio * scale_y)
+    bottom_zone_end = start_y + 10 + int(h * scale_y)  # Bottom of the projection area
+    bottom_zone_start = bottom_zone_end - bottom_zone_height
+
+    # Draw detection zones
+    cv2.rectangle(debug_img, (proj_area_x, top_zone_start),
+                  (proj_area_x + proj_width, top_zone_end), (0, 255, 255), 2)
+    cv2.rectangle(debug_img, (proj_area_x, bottom_zone_start),
+                  (proj_area_x + proj_width, bottom_zone_end), (255, 200, 0), 2)
+
+    # Zone labels without background
+    cv2.putText(debug_img, "TOP", (proj_area_x + 5, start_y + 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+    cv2.putText(debug_img, "BOTTOM", (proj_area_x + 5, bottom_zone_start + 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 200, 0), 1)
+
+    # Cut markers without background
+    if yt_border > 0:
+        cut_y = start_y + 10 + int(yt_border * scale_y)
+        cv2.line(debug_img, (proj_area_x, cut_y), (proj_area_x + proj_width, cut_y), (255, 0, 255), 3)
+        cv2.putText(debug_img, f"T:{yt_border}", (proj_area_x + proj_width + 5, cut_y + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 255), 1)
+
+    if yb_border < h:
+        cut_y = start_y + 10 + int(yb_border * scale_y)
+        cv2.line(debug_img, (proj_area_x, cut_y), (proj_area_x + proj_width, cut_y), (255, 0, 255), 3)
+        cv2.putText(debug_img, f"B:{h-yb_border}", (proj_area_x + proj_width + 5, cut_y + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 255), 1)
+
+    # Parameters section with clear separation (adjusted for smaller space)
+    info_y = start_y + height - 30
+    cv2.line(debug_img, (start_x, info_y - 5), (start_x + width, info_y - 5), (200, 200, 200), 1)
+
+    cv2.putText(debug_img, "PARAMETERS:", (start_x, info_y + 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 2)
+    cv2.putText(debug_img, f"Height: {h}px | Coverage: {max_cov:.3f}",
+                (start_x, info_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
+    cv2.putText(debug_img, f"Top: {top_detection_ratio*100:.0f}% | Bottom: {bottom_detection_ratio*100:.0f}%",
+                (start_x, info_y + 45), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
 
 
 def _render_combined_debug(roi_bgr: np.ndarray,
@@ -391,7 +382,7 @@ def _render_combined_debug(roi_bgr: np.ndarray,
     mask_before_panel = resize_panel(to_bgr(mask_original), interp=cv2.INTER_NEAREST)
     mask_after_panel = resize_panel(to_bgr(mask_after), interp=cv2.INTER_NEAREST)
 
-    # Projection overlay
+    # Projection overlay with boundary lines
     projection_overlay = masked_roi.copy()
     cv2.line(projection_overlay, (max(0, int(xl_proj)), 0), (max(0, int(xl_proj)), h - 1), (0, 0, 255), 1)
     cv2.line(projection_overlay, (max(0, int(xr_proj - 1)), 0), (max(0, int(xr_proj - 1)), h - 1), (0, 0, 255), 1)
@@ -399,48 +390,66 @@ def _render_combined_debug(roi_bgr: np.ndarray,
     cv2.line(projection_overlay, (0, max(0, int(yb_proj - 1))), (w - 1, max(0, int(yb_proj - 1))), (0, 0, 255), 1)
     projection_panel = resize_panel(projection_overlay)
 
-    # Projection histograms
+    # Projection histograms with improved visibility
     hist_w = base_w
+
+    # Vertical projection panel with increased bar height
     v_panel = np.full((panel_h, hist_w), 255, dtype=np.uint8)
     vproj = mask_after.sum(axis=0).astype(np.float32)
     if vproj.size:
         vp = vproj / (vproj.max() + 1e-6)
+        # Use 80% of panel height for better visibility
+        max_bar_height = int(panel_h * 0.8)
         for col in range(hist_w):
             sx = int(round(col / max(1, hist_w - 1) * max(0, w - 1)))
-            bar = int(round(vp[sx] * (panel_h - 1)))
+            bar = int(round(vp[sx] * max_bar_height))
             if bar > 0:
                 v_panel[panel_h - bar:panel_h, col] = 0
         xl_bar = int(round(max(0, xl_proj) / max(1, w - 1) * max(0, hist_w - 1)))
         xr_bar = int(round(max(0, xr_proj - 1) / max(1, w - 1) * max(0, hist_w - 1)))
-        cv2.line(v_panel, (xl_bar, 0), (xl_bar, panel_h - 1), 128, 1)
-        cv2.line(v_panel, (xr_bar, 0), (xr_bar, panel_h - 1), 128, 1)
+        cv2.line(v_panel, (xl_bar, 0), (xl_bar, panel_h - 1), 128, 2)
+        cv2.line(v_panel, (xr_bar, 0), (xr_bar, panel_h - 1), 128, 2)
     vertical_panel = cv2.cvtColor(v_panel, cv2.COLOR_GRAY2BGR)
 
+    # Horizontal projection panel with increased bar width
     h_panel = np.full((panel_h, hist_w), 255, dtype=np.uint8)
     hproj = mask_after.sum(axis=1).astype(np.float32)
     if hproj.size:
         hp = hproj / (hproj.max() + 1e-6)
+        # Use 80% of panel width for better visibility
+        max_bar_width = int(hist_w * 0.8)
         for row in range(panel_h):
             sy = int(round(row / max(1, panel_h - 1) * max(0, h - 1)))
-            bar = int(round(hp[sy] * (hist_w - 1)))
+            bar = int(round(hp[sy] * max_bar_width))
             if bar > 0:
                 h_panel[row, :bar] = 0
         yt_bar = int(round(max(0, yt_proj) / max(1, h - 1) * max(0, panel_h - 1)))
         yb_bar = int(round(max(0, yb_proj - 1) / max(1, h - 1) * max(0, panel_h - 1)))
-        cv2.line(h_panel, (0, yt_bar), (hist_w - 1, yt_bar), 128, 1)
-        cv2.line(h_panel, (0, yb_bar), (hist_w - 1, yb_bar), 128, 1)
+        cv2.line(h_panel, (0, yt_bar), (max_bar_width, yt_bar), 128, 2)
+        cv2.line(h_panel, (0, yb_bar), (max_bar_width, yb_bar), 128, 2)
     horizontal_panel = cv2.cvtColor(h_panel, cv2.COLOR_GRAY2BGR)
 
     # === Border removal row ===
-    # Create border removal visualization similar to PROJ
-    border_overlay = masked_roi.copy()
+    # Show Border input (Proj output) and Border output overlaid
+    # Create a visualization showing the progression: Proj output -> Border input -> Border output
+    border_overlay = np.full_like(roi_bgr, 255)  # Start with white background
+
+    # Show Border's input region (Proj output) in gray
+    proj_region_mask = np.zeros_like(bin_after)
+    if xl_proj < xr_proj and yt_proj < yb_proj:
+        proj_region_mask[yt_proj:yb_proj, xl_proj:xr_proj] = bin_after[yt_proj:yb_proj, xl_proj:xr_proj]
+        border_overlay[proj_region_mask.astype(bool)] = roi_bgr[proj_region_mask.astype(bool)]
+
+    # Draw Border boundaries only (no Proj boundaries in Border stage) - blue to distinguish from Proj
     cv2.line(border_overlay, (max(0, int(xl_border)), 0), (max(0, int(xl_border)), h - 1), (255, 0, 0), 1)
     cv2.line(border_overlay, (max(0, int(xr_border - 1)), 0), (max(0, int(xr_border - 1)), h - 1), (255, 0, 0), 1)
     cv2.line(border_overlay, (0, max(0, int(yt_border))), (w - 1, max(0, int(yt_border))), (255, 0, 0), 1)
     cv2.line(border_overlay, (0, max(0, int(yb_border - 1))), (w - 1, max(0, int(yb_border - 1))), (255, 0, 0), 1)
+
     border_panel = resize_panel(border_overlay)
 
     # Border horizontal projection analysis with detailed visualization
+    # Use the actual Border input (Proj output region)
     border_region = bin_after[yt_proj:yb_proj, xl_proj:xr_proj] if xl_proj < xr_proj and yt_proj < yb_proj else np.zeros((1, 1), dtype=np.uint8)
 
     # Create comprehensive border projection visualization
@@ -736,11 +745,18 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
 
                 # Generate border detection debug image (verbose version)
                 if BORDER_REMOVAL_CONFIG.get('debug_verbose', False):
+                    # Calculate coordinates relative to border_region (Proj output)
+                    xl_border_rel = xl_border - xl_proj  # Border左切割相对于Proj输出的位置
+                    xr_border_rel = xr_border - xl_proj  # Border右切割相对于Proj输出的位置
+                    yt_border_rel = yt_border - yt_proj  # Border上切割相对于Proj输出的位置
+                    yb_border_rel = yb_border - yt_proj  # Border下切割相对于Proj输出的位置
+
                     border_debug_img = _create_border_debug_image(
                         bin_after[yt_proj:yb_proj, xl_proj:xr_proj],
-                        int(xl_border), int(xr_border),
-                        int(xl_proj), int(xr_proj),
-                        BORDER_REMOVAL_CONFIG
+                        int(xl_border_rel), int(xr_border_rel),
+                        0, int(xr_proj - xl_proj),  # Proj在border_region中的范围就是整个区域
+                        BORDER_REMOVAL_CONFIG,
+                        int(yt_border_rel), int(yb_border_rel)
                     )
                     border_dbg_name = f"{os.path.splitext(fname)[0]}_border_debug.png"
                     cv2.imwrite(os.path.join(out_dbg, border_dbg_name), border_debug_img)

@@ -87,10 +87,23 @@ PROJECTION_TRIM_CONFIG = {
     'primary_run_min_mass_ratio': 0.5,  # 主 run 需占投影质量的比例
     'primary_run_min_length_ratio': 0.3,# 主 run 需占宽度的比例
     'tighten_min_coverage': 0.01,       # 主 run 内重新贴边的阈值
-    'left_trim_limit_ratio': 0.2,      # 左侧最大可裁比例（<=0 表示不限）
-    'right_trim_limit_ratio': 0.2,     # 右侧最大可裁比例（<=0 表示不限）
-    'top_trim_limit_ratio': 0.25,        # 上侧最大可裁比例（<=0 表示不限）
-    'bottom_trim_limit_ratio': 0.5,     # 下侧最大可裁比例（<=0 表示不限）
+
+    # 检测范围参数 - 在多大范围内寻找内容边界
+    'detection_range': {
+        'left_ratio': 0.25,      # 左侧检测范围占总宽度的比例
+        'right_ratio': 0.25,     # 右侧检测范围占总宽度的比例
+        'top_ratio': 0.3,       # 上侧检测范围占总高度的比例
+        'bottom_ratio': 0.5,    # 下侧检测范围占总高度的比例
+    },
+
+    # 切割限制参数 - 最多允许切掉多少内容（不包括空白）
+    'cut_limits': {
+        'left_max_ratio': 0.2,      # 左侧最大切割比例
+        'right_max_ratio': 0.2,     # 右侧最大切割比例
+        'top_max_ratio': 0.2,      # 上侧最大切割比例
+        'bottom_max_ratio': 0.4,    # 下侧最大切割比例
+    },
+
 }
 
 CC_FILTER_CONFIG = {
@@ -106,16 +119,30 @@ CC_FILTER_CONFIG = {
 BORDER_REMOVAL_CONFIG = {
     'enabled': True,                     # 是否启用边框去除
     'max_iterations': 5,                # 最大迭代次数（多次执行以完全去除边框）
+
+    # 水平边框检测参数
     'border_max_width_ratio': 0.2,      # 最大边框宽度占比（左右两侧检测范围）
-    'border_threshold_ratio': 0.4,     # 边框检测阈值（相对于最大投影值的比例）
-    'vertical_white_threshold': 0.0001,  # 垂直白边检测阈值（只去除纯白区域）
+    'border_threshold_ratio': 0.35,     # 边框检测阈值（相对于最大投影值的比例）
+
     # 突变检测参数
     'spike_min_length_ratio': 0.02,     # 异常高值段最小长度占检测范围的比例
     'spike_max_length_ratio': 0.08,      # 异常高值段最大长度占检测范围的比例
     'spike_gradient_threshold': 0.4,    # 突变梯度阈值（相对于最大投影值）
     'spike_prominence_ratio': 0.5,      # 突出度阈值（峰值相对于周围的突出程度）
     'edge_tolerance': 4,                # 允许的边缘偏移像素数
-    'debug_verbose': False,             # 是否输出详细的border debug图
+
+    # 垂直边框处理参数 - 使用类似Proj的结构化方案
+    'vertical_detection_range': {
+        'top_ratio': 0.3,       # 上侧检测范围占总高度的比例
+        'bottom_ratio': 0.3,    # 下侧检测范围占总高度的比例
+    },
+
+    'vertical_cut_limits': {
+        'top_max_ratio': 0.5,       # 上侧最大切割比例
+        'bottom_max_ratio': 0.5,    # 下侧最大切割比例
+    },
+
+    'debug_verbose': False,              # 是否输出详细的border debug图
 }
 
 NOISE_REMOVAL_CONFIG = {
@@ -123,7 +150,7 @@ NOISE_REMOVAL_CONFIG = {
     'dark_stroke_threshold': 60,       # 深色笔画阈值（<=此值认为是文字主体）
     'light_noise_threshold': 230,      # 淡色杂质阈值（>深色且<此值的区域为杂质候选）
     'min_noise_area': 3,               # 最小杂质面积
-    'max_noise_area': 300,             # 最大杂质面积（绝对像素数）
+    'max_noise_area': 100000,          # 最大杂质面积（绝对像素数）
     'large_noise_area_threshold': 50,  # 大块杂质面积阈值（超过此值认为是杂质而非文字边缘）
 }
 
@@ -150,12 +177,37 @@ def validate_config() -> None:
     else:
         if expand_cfg < 0:
             raise ValueError('SEGMENT_REFINE_CONFIG.expand_px 不能为负数')
-    for key in ('horizontal_trim_limit_ratio', 'vertical_trim_limit_ratio'):
-        if PROJECTION_TRIM_CONFIG.get(key, 1.0) < 0:
-            raise ValueError(f'PROJECTION_TRIM_CONFIG.{key} 不能为负数')
-    for key in ('horizontal_trim_limit_px', 'vertical_trim_limit_px'):
-        if PROJECTION_TRIM_CONFIG.get(key, 0) < 0:
-            raise ValueError(f'PROJECTION_TRIM_CONFIG.{key} 不能为负数')
+
+    # 验证新的参数结构
+    detection_range = PROJECTION_TRIM_CONFIG.get('detection_range', {})
+    if isinstance(detection_range, dict):
+        for key in ('left_ratio', 'right_ratio', 'top_ratio', 'bottom_ratio'):
+            val = detection_range.get(key, 0.3)
+            if val < 0 or val > 1:
+                raise ValueError(f'PROJECTION_TRIM_CONFIG.detection_range.{key} 必须在0-1之间')
+
+    cut_limits = PROJECTION_TRIM_CONFIG.get('cut_limits', {})
+    if isinstance(cut_limits, dict):
+        for key in ('left_max_ratio', 'right_max_ratio', 'top_max_ratio', 'bottom_max_ratio'):
+            val = cut_limits.get(key, 0.2)
+            if val < 0 or val > 1:
+                raise ValueError(f'PROJECTION_TRIM_CONFIG.cut_limits.{key} 必须在0-1之间')
+
+    # 验证Border垂直参数结构
+    border_vertical_detection = BORDER_REMOVAL_CONFIG.get('vertical_detection_range', {})
+    if isinstance(border_vertical_detection, dict):
+        for key in ('top_ratio', 'bottom_ratio'):
+            val = border_vertical_detection.get(key, 0.3)
+            if val < 0 or val > 1:
+                raise ValueError(f'BORDER_REMOVAL_CONFIG.vertical_detection_range.{key} 必须在0-1之间')
+
+    border_vertical_cuts = BORDER_REMOVAL_CONFIG.get('vertical_cut_limits', {})
+    if isinstance(border_vertical_cuts, dict):
+        for key in ('top_max_ratio', 'bottom_max_ratio'):
+            val = border_vertical_cuts.get(key, 0.1)
+            if val < 0 or val > 1:
+                raise ValueError(f'BORDER_REMOVAL_CONFIG.vertical_cut_limits.{key} 必须在0-1之间')
+
 
 def config_summary(compact: bool = True) -> Dict[str, Any]:
     summary = {

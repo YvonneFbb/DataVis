@@ -64,8 +64,10 @@ def trim_border_from_bin(binary_img: np.ndarray, params: Dict) -> Tuple[int, int
         else:
             break
 
-    # Step 2: Perform vertical projection analysis on the final horizontally trimmed region
-    if total_xl < total_xr:
+    # Step 2: Perform vertical cutting only if horizontal border cutting actually occurred
+    horizontal_cutting_occurred = (total_xl > 0) or (total_xr < w)
+
+    if horizontal_cutting_occurred and total_xl < total_xr:
         final_region = binary_img[:, total_xl:total_xr]
         yt, yb = _find_vertical_trim_bounds(final_region, params)
     else:
@@ -273,10 +275,11 @@ def _debug_border_detection(projection: np.ndarray, params: Dict, is_left: bool,
 
 def _find_vertical_trim_bounds(binary_img: np.ndarray, params: Dict) -> Tuple[int, int]:
     """
-    Find vertical trim bounds by removing only white margins.
+    Find vertical trim bounds using structured detection range and cut limits.
 
-    This function removes pure white (empty) rows from top and bottom,
-    but does not tighten into text content.
+    This function uses a two-stage approach similar to projection trimming:
+    1. Detection stage: Find content boundaries within specified detection ranges
+    2. Cut limit stage: Apply maximum cut constraints to protect content
 
     Args:
         binary_img: Binary image after horizontal border removal
@@ -290,23 +293,109 @@ def _find_vertical_trim_bounds(binary_img: np.ndarray, params: Dict) -> Tuple[in
         return 0, h
 
     # Calculate vertical projection (row-wise coverage)
-    vertical_projection = binary_img.sum(axis=1).astype(np.float32) / (w * 255.0)
+    coverage = binary_img.sum(axis=1).astype(np.float32) / (w * 255.0)
 
-    if vertical_projection.size == 0:
+    if coverage.size == 0:
         return 0, h
 
-    # Parameters for white margin removal
-    white_threshold = float(params.get('vertical_white_threshold', 0.001))  # Nearly zero content
+    # Get parameters with fallback to legacy behavior
+    vertical_detection = params.get('vertical_detection_range', {})
+    vertical_cuts = params.get('vertical_cut_limits', {})
 
-    # Find first and last rows with any meaningful content
-    content_rows = vertical_projection > white_threshold
-    if not np.any(content_rows):
+    # Detection range parameters
+    top_detection_ratio = float(vertical_detection.get('top_ratio', 0.3))
+    bottom_detection_ratio = float(vertical_detection.get('bottom_ratio', 0.3))
+
+    # Cut limit parameters
+    top_cut_ratio = float(vertical_cuts.get('top_max_ratio', 0.1))
+    bottom_cut_ratio = float(vertical_cuts.get('bottom_max_ratio', 0.1))
+
+
+    # New structured approach: Find content runs
+    max_cov = coverage.max()
+    if max_cov <= 0.0:
         return 0, h
 
-    # Find first and last content rows (remove only pure white margins)
-    content_indices = np.where(content_rows)[0]
-    yt = int(content_indices[0])
-    yb = int(content_indices[-1] + 1)
+    # Use same content detection threshold as Proj trimming
+    min_cov = max(0.001, 0.01 * max_cov)  # Same as Proj: 1% of max coverage
+
+    # Find content runs
+    runs = []
+    i = 0
+    while i < h:
+        if coverage[i] <= min_cov:
+            i += 1
+            continue
+        j = i
+        while j < h and coverage[j] > min_cov:
+            j += 1
+        runs.append((i, j))
+        i = j
+
+    if not runs:
+        return 0, h
+
+    # Calculate detection and cut limits (same as Proj)
+    top_detection_limit = int(h * top_detection_ratio)
+    bottom_detection_limit = int(h * bottom_detection_ratio)
+    top_trim_limit = int(h * top_cut_ratio)
+    bottom_trim_limit = int(h * bottom_cut_ratio)
+
+    # 阶段1：在检测范围内寻找内容边界 (same logic as Proj)
+    # Find top boundary within detection range
+    top_idx = 0
+    while top_idx < len(runs) and runs[top_idx][1] <= top_detection_limit:
+        top_idx += 1
+    if top_idx >= len(runs):
+        top_idx = len(runs) - 1
+
+    top_detected = runs[top_idx][0] if top_idx < len(runs) else 0
+
+    # Find bottom boundary within detection range
+    bottom_idx = len(runs) - 1
+    while bottom_idx >= 0 and runs[bottom_idx][0] >= max(0, h - bottom_detection_limit):
+        bottom_idx -= 1
+    if bottom_idx < 0:
+        bottom_idx = len(runs) - 1
+
+    bottom_detected = runs[bottom_idx][1] if bottom_idx >= 0 else h
+
+    # 阶段2：应用切割限制，确保不过度切割实际内容 (same logic as Proj)
+    # Find overall content boundaries
+    content_top = runs[0][0] if runs else 0
+    content_bottom = runs[-1][1] if runs else h
+
+    # Calculate maximum allowed cutting of actual content
+    content_height = content_bottom - content_top
+    max_top_cut = int(content_height * top_cut_ratio) if content_height > 0 else 0
+    max_bottom_cut = int(content_height * bottom_cut_ratio) if content_height > 0 else 0
+
+    # Calculate final cuts using Proj logic
+    # Top: can cut whitespace freely, but limit content cutting
+    if top_detected <= content_top:
+        # Cutting only whitespace above content
+        final_top = top_detected
+    else:
+        # Would cut into content, apply limit
+        final_top = max(content_top, content_top + max(0, min(max_top_cut, top_detected - content_top)))
+
+    # Bottom: similar logic
+    if bottom_detected >= content_bottom:
+        # Cutting only whitespace below content
+        final_bottom = bottom_detected
+    else:
+        # Would cut into content, apply limit
+        final_bottom = min(content_bottom, content_bottom - max(0, min(max_bottom_cut, content_bottom - bottom_detected)))
+
+    yt = final_top
+    yb = final_bottom
+
+    # Fine adjustment: remove very low coverage pixels at edges
+    tighten_threshold = max(0.005, 0.005 * max_cov)
+    while yt < h and coverage[yt] <= tighten_threshold:
+        yt += 1
+    while yb > 0 and coverage[yb - 1] <= tighten_threshold:
+        yb -= 1
 
     # Ensure valid bounds
     yt = max(0, min(h-1, yt))
