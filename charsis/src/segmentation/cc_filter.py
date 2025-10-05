@@ -50,6 +50,7 @@ def refine_binary_components(bin_img: np.ndarray, params: Dict) -> np.ndarray:
     # Shape constraints for edge/border components
     max_aspect_for_edge = float(params.get('max_aspect_for_edge', 10.0))
     min_dim_px = int(params.get('min_dim_px', 2))
+    interior_min_dim_px = int(params.get('interior_min_dim_px', 2))
 
     # Calculate area thresholds
     total_area = h * w
@@ -65,12 +66,30 @@ def refine_binary_components(bin_img: np.ndarray, params: Dict) -> np.ndarray:
     for i in range(1, num):
         x, y, ww, hh, area = stats[i]
 
+        # Calculate minimum area rectangle for rotated bounding box
+        component_mask = (labels == i).astype(np.uint8)
+        contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if contours:
+            # Get minimum area rectangle (rotated)
+            rect = cv2.minAreaRect(contours[0])
+            # rect = ((center_x, center_y), (width, height), angle)
+            # width and height are already ordered, but we need min/max
+            rect_width, rect_height = rect[1]
+            min_rect_dim = min(rect_width, rect_height)
+            max_rect_dim = max(rect_width, rect_height)
+        else:
+            # Fallback to axis-aligned box
+            min_rect_dim = min(ww, hh)
+            max_rect_dim = max(ww, hh)
+
         # Classify component based on position
         component_type, should_remove = _classify_and_filter_component(
             x, y, ww, hh, area, w, h,
             border_touch_margin, edge_zone_margin,
             border_area_thr, edge_area_thr, interior_area_thr,
-            max_aspect_for_edge, min_dim_px
+            max_aspect_for_edge, min_dim_px, interior_min_dim_px,
+            min_rect_dim, max_rect_dim
         )
 
         if should_remove:
@@ -83,9 +102,14 @@ def _classify_and_filter_component(x: int, y: int, ww: int, hh: int, area: int,
                                    img_w: int, img_h: int,
                                    border_margin: int, edge_margin: int,
                                    border_thr: int, edge_thr: int, interior_thr: int,
-                                   max_aspect: float, min_dim: int) -> tuple[str, bool]:
+                                   max_aspect: float, min_dim: int, interior_min_dim: int,
+                                   min_rect_dim: float, max_rect_dim: float) -> tuple[str, bool]:
     """
     Classify component into border-touching, edge-zone, or interior, and decide if it should be removed.
+
+    Args:
+        min_rect_dim: Minimum dimension of the minimum area rectangle (rotated box)
+        max_rect_dim: Maximum dimension of the minimum area rectangle (rotated box)
 
     Returns:
         (component_type, should_remove): component classification and removal decision
@@ -103,9 +127,9 @@ def _classify_and_filter_component(x: int, y: int, ww: int, hh: int, area: int,
         if area < border_thr:
             return component_type, True
 
-        # Shape constraints for border components
-        aspect = max(ww / max(1, hh), hh / max(1, ww))
-        if aspect >= max_aspect or min(ww, hh) <= min_dim:
+        # Shape constraints for border components using minimum area rectangle
+        aspect_rect = max_rect_dim / max(1.0, min_rect_dim)
+        if aspect_rect >= max_aspect or min_rect_dim <= min_dim:
             return component_type, True
 
         return component_type, False
@@ -122,9 +146,9 @@ def _classify_and_filter_component(x: int, y: int, ww: int, hh: int, area: int,
         if area < edge_thr:
             return component_type, True
 
-        # Shape constraints for edge components
-        aspect = max(ww / max(1, hh), hh / max(1, ww))
-        if aspect >= max_aspect or min(ww, hh) <= min_dim:
+        # Shape constraints for edge components using minimum area rectangle
+        aspect_rect = max_rect_dim / max(1.0, min_rect_dim)
+        if aspect_rect >= max_aspect or min_rect_dim <= min_dim:
             return component_type, True
 
         return component_type, False
@@ -133,6 +157,10 @@ def _classify_and_filter_component(x: int, y: int, ww: int, hh: int, area: int,
     component_type = "interior"
     # Apply interior rules (usually more lenient)
     if area < interior_thr:
+        return component_type, True
+
+    # Shape constraints for interior components using minimum area rectangle
+    if min_rect_dim <= interior_min_dim:
         return component_type, True
 
     return component_type, False

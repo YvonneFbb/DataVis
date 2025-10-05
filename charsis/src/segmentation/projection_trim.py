@@ -115,48 +115,54 @@ def _trim_axis(mask: np.ndarray, axis: int, params: Dict) -> Tuple[int, int]:
 
     tighten_cov = float(params.get('tighten_min_coverage', 0.01))
 
-    # 阶段1：在检测范围内寻找内容边界
-    # Find left boundary within detection range
-    left_idx = 0
-    while left_idx < len(runs) and runs[left_idx][1] <= detection_left_limit:
-        left_idx += 1
-    if left_idx >= len(runs):
-        left_idx = len(runs) - 1
+    # 新逻辑：在detection_range内查找离散块，若块的宽度≤cut_limits则切掉
 
-    # 从检测到的第一个有效run开始
-    left_detected = runs[left_idx][0] if left_idx < len(runs) else 0
+    # 左侧处理：查找detection_range内的runs，判断是否应该切掉
+    left = 0
+    for i, (run_start, run_end, run_mass) in enumerate(runs):
+        # 如果run完全在detection_range内
+        if run_end <= detection_left_limit:
+            # 计算这个run的宽度
+            run_width = run_end - run_start
+            # 如果run宽度 <= 总长度 * cut_limit，则切掉（从下一个run开始）
+            if run_width <= total_len * cut_left_ratio:
+                # 继续检查下一个run
+                continue
+            else:
+                # 这个run太大，保留它，从它开始
+                left = run_start
+                break
+        else:
+            # run超出了detection_range，从它开始
+            left = run_start
+            break
+    else:
+        # 所有runs都在detection_range内且都被切掉了
+        left = runs[-1][1] if runs else 0
 
-    # Find right boundary within detection range
-    right_idx = len(runs) - 1
-    while right_idx >= 0 and runs[right_idx][0] >= max(0, total_len - detection_right_limit):
-        right_idx -= 1
-    if right_idx < 0:
-        right_idx = len(runs) - 1
-
-    # 从检测到的最后一个有效run结束
-    right_detected = runs[right_idx][1] if right_idx >= 0 else total_len
-
-    # 阶段2：应用切割限制，确保不过度切割实际内容
-    # Find the overall content boundaries (all runs combined)
-    content_left = runs[0][0] if runs else 0  # leftmost content start
-    content_right = runs[-1][1] if runs else total_len  # rightmost content end
-
-    # Calculate maximum allowed cutting of actual content (not whitespace)
-    content_width = content_right - content_left
-    max_left_cut = int(content_width * cut_left_ratio) if content_width > 0 else 0
-    max_right_cut = int(content_width * cut_right_ratio) if content_width > 0 else 0
-
-    # Apply cut limits based on actual content boundaries
-    min_allowed_left = content_left + max_left_cut
-    max_allowed_right = content_right - max_right_cut
-
-    # Apply detection results with cut limit constraints
-    left_candidate = left_detected
-    right_candidate = right_detected
-
-    # Ensure we don't cut too much actual content
-    left = min(left_candidate, min_allowed_left)
-    right = max(max_allowed_right, right_candidate)
+    # 右侧处理：从右往左查找
+    right = total_len
+    for i in range(len(runs) - 1, -1, -1):
+        run_start, run_end, run_mass = runs[i]
+        # 如果run完全在detection_range内（从右侧算）
+        if run_start >= total_len - detection_right_limit:
+            # 计算这个run的宽度
+            run_width = run_end - run_start
+            # 如果run宽度 <= 总长度 * cut_limit，则切掉
+            if run_width <= total_len * cut_right_ratio:
+                # 继续检查前一个run
+                continue
+            else:
+                # 这个run太大，保留它，到它结束
+                right = run_end
+                break
+        else:
+            # run超出了detection_range，到它结束
+            right = run_end
+            break
+    else:
+        # 所有runs都在detection_range内且都被切掉了
+        right = runs[0][0] if runs else total_len
 
     # 精细调整：去除边缘的低覆盖像素
     while left < total_len and coverage[left] <= tighten_cov:

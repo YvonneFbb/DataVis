@@ -16,10 +16,10 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 try:
-    from src.config import ARK_VISION_CONFIG, SEGMENTS_DIR, POSTOCR_DIR
+    from src.config import POSTOCR_CONFIG, SEGMENTS_DIR, POSTOCR_DIR
 except Exception as e:
     raise RuntimeError(
-        f"无法导入必要配置 (ARK_VISION_CONFIG/SEGMENTS_DIR/POSTOCR_DIR)。原始错误: {e}"
+        f"无法导入必要配置 (POSTOCR_CONFIG/SEGMENTS_DIR/POSTOCR_DIR)。原始错误: {e}"
     )
 
 from src.utils.path import ensure_dir
@@ -66,16 +66,27 @@ def _parse_ark_response(raw: str) -> Dict[str, Any]:
     }
 
 
-def _build_ark_config() -> Optional[ArkVisionConfig]:
-    if not ARK_VISION_CONFIG.get('enabled', False):
+def _build_vision_config() -> Optional[ArkVisionConfig]:
+    """根据配置构建视觉模型客户端配置"""
+    if not POSTOCR_CONFIG.get('enabled', False):
         return None
+
+    provider = str(POSTOCR_CONFIG.get('provider', 'doubao')).lower()
+    provider_cfg = POSTOCR_CONFIG.get(provider, {})
+
+    if not provider_cfg:
+        logger.warning(f"未找到 provider '{provider}' 的配置，PostOCR 将被禁用")
+        return None
+
     return ArkVisionConfig(
-        base_url=str(ARK_VISION_CONFIG.get('base_url', 'https://ark.cn-beijing.volces.com/api/v3')),
-        model=str(ARK_VISION_CONFIG.get('model', '')),
-        api_key_env=str(ARK_VISION_CONFIG.get('api_key_env', 'ARK_API_KEY')),
-        timeout=int(ARK_VISION_CONFIG.get('timeout', 60)),
-        temperature=float(ARK_VISION_CONFIG.get('temperature', 0.0)),
-        max_tokens=int(ARK_VISION_CONFIG.get('max_tokens', 256)),
+        base_url=str(provider_cfg.get('base_url', '')),
+        model=str(provider_cfg.get('model', '')),
+        api_key_env=str(provider_cfg.get('api_key_env', 'ARK_API_KEY')),
+        timeout=int(provider_cfg.get('timeout', 60)),
+        temperature=float(provider_cfg.get('temperature', 0.0)),
+        max_tokens=int(provider_cfg.get('max_tokens', 256)),
+        enable_thinking=bool(provider_cfg.get('enable_thinking', False)),
+        thinking_budget=int(provider_cfg.get('thinking_budget', 8192)),
     )
 
 
@@ -177,8 +188,8 @@ def process_all_segment_results(input_base_dir: str | None = None,
         return {'total_dirs': 0}
 
     force = bool(config and config.get('force'))
-    ark_cfg = _build_ark_config()
-    workers = max(1, int(ARK_VISION_CONFIG.get('workers', 4)))
+    ark_cfg = _build_vision_config()
+    workers = max(1, int(POSTOCR_CONFIG.get('workers', 4)))
 
     batch = {
         'total_dirs': len(candidate_dirs),
@@ -271,7 +282,7 @@ if __name__ == '__main__':
             print(f"输入目录不存在: {in_dir}")
             sys.exit(1)
         out_dir = args.output_dir or os.path.join(POSTOCR_DIR, os.path.basename(os.path.normpath(in_dir)))
-        stats = filter_character_dir(in_dir, out_dir, _build_ark_config(), force=args.force)
+        stats = filter_character_dir(in_dir, out_dir, _build_vision_config(), force=args.force)
         print(json.dumps(stats, ensure_ascii=False, indent=2))
     else:
         batch_stats = process_all_segment_results(config={'force': args.force})

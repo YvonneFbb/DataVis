@@ -819,6 +819,9 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
                         # Place the processed character in the refined position
                         overlay_processed[y_start:y_end, x_start:x_end] = crop_img_resized
 
+                    # Draw bounding box on processed side to show the cutting boundary (darker green for better visibility)
+                    cv2.rectangle(overlay_processed, (rx, ry), (rx + rw - 1, ry + rh - 1), (0, 180, 0), 2)
+
     # Create side-by-side comparison
     gap_width = 20
     gap = np.full((overlay_original.shape[0], gap_width, 3), 255, dtype=np.uint8)

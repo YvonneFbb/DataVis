@@ -17,6 +17,8 @@ class ArkVisionConfig:
     timeout: int = 60
     temperature: float = 0.0
     max_tokens: int = 256
+    enable_thinking: bool = False       # 是否启用推理模式（仅 qwen3-vl-plus 支持）
+    thinking_budget: int = 8192        # 推理模式最大 token 数
     system_prompt: str = (
         "你是古籍字符质量的终审员。请非常严格地审查输入图像，遵守以下规则：\n"
         "1. 只能依据图像中真实可见的笔画判断，不允许凭经验或模糊轮廓猜测。\n"
@@ -56,11 +58,49 @@ class ArkVisionClient:
             "temperature": self.cfg.temperature,
             "max_tokens": self.cfg.max_tokens,
         }
+
+        # 如果启用推理模式（仅 qwen3-vl-plus 支持）
+        if self.cfg.enable_thinking and 'qwen3-vl-plus' in self.cfg.model.lower():
+            payload['stream'] = True
+            payload['extra_body'] = {
+                'enable_thinking': True,
+                'thinking_budget': self.cfg.thinking_budget
+            }
+            return self._handle_streaming_response(payload)
+        else:
+            # 普通非流式调用
+            start = time.time()
+            response = self.client.chat.completions.create(**payload)
+            duration = time.time() - start
+            content = response.choices[0].message.content.strip()
+            return {
+                "raw": content,
+                "response_time": duration,
+            }
+
+    def _handle_streaming_response(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """处理流式响应（推理模式）"""
         start = time.time()
-        response = self.client.chat.completions.create(**payload)
+        reasoning_content = ""
+        answer_content = ""
+
+        completion = self.client.chat.completions.create(**payload)
+
+        for chunk in completion:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            # 收集推理过程
+            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                reasoning_content += delta.reasoning_content
+            # 收集回复内容
+            if delta.content:
+                answer_content += delta.content
+
         duration = time.time() - start
-        content = response.choices[0].message.content.strip()
         return {
-            "raw": content,
+            "raw": answer_content,
+            "reasoning": reasoning_content,
             "response_time": duration,
         }

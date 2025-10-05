@@ -70,7 +70,7 @@ SEGMENT_REFINE_CONFIG = {
     'expand_px': {              # ROI 额外扩张像素（分别对应左右上下）
         'left': 2,
         'right': 2,
-        'top': 4,
+        'top': 10,
         'bottom': 2,
     },
     'final_pad': 0,             # 裁剪后的统一回填像素
@@ -90,18 +90,18 @@ PROJECTION_TRIM_CONFIG = {
 
     # 检测范围参数 - 在多大范围内寻找内容边界
     'detection_range': {
-        'left_ratio': 0.25,      # 左侧检测范围占总宽度的比例
-        'right_ratio': 0.25,     # 右侧检测范围占总宽度的比例
+        'left_ratio': 0.3,      # 左侧检测范围占总宽度的比例
+        'right_ratio': 0.3,     # 右侧检测范围占总宽度的比例
         'top_ratio': 0.3,       # 上侧检测范围占总高度的比例
         'bottom_ratio': 0.5,    # 下侧检测范围占总高度的比例
     },
 
     # 切割限制参数 - 最多允许切掉多少内容（不包括空白）
     'cut_limits': {
-        'left_max_ratio': 0.2,      # 左侧最大切割比例
-        'right_max_ratio': 0.2,     # 右侧最大切割比例
-        'top_max_ratio': 0.2,      # 上侧最大切割比例
-        'bottom_max_ratio': 0.4,    # 下侧最大切割比例
+        'left_max_ratio': 0.25,      # 左侧最大切割比例
+        'right_max_ratio': 0.25,     # 右侧最大切割比例
+        'top_max_ratio': 0.25,      # 上侧最大切割比例
+        'bottom_max_ratio': 0.3,    # 下侧最大切割比例
     },
 
 }
@@ -111,59 +111,77 @@ CC_FILTER_CONFIG = {
     'edge_zone_margin': 2,              # 边缘区域判定范围（像素）
     'border_touch_min_area_ratio': 0.02,  # 触边组件最小面积比例
     'edge_zone_min_area_ratio': 0.01,     # 边缘区域组件最小面积比例
-    'interior_min_area_ratio': 0.004,     # 内部组件最小面积比例
+    'interior_min_area_ratio': 0.002,     # 内部组件最小面积比例
     'max_aspect_for_edge': 6.0,         # 边缘/触边组件最大长宽比
-    'min_dim_px': 4,                    # 边缘/触边组件最小尺寸（像素）
+    'min_dim_px': 2,                    # 边缘/触边组件最小尺寸（宽度或高度的最小值，像素）
+    'interior_min_dim_px': 1,           # 内部组件最小尺寸（宽度或高度的最小值，像素）
 }
 
 BORDER_REMOVAL_CONFIG = {
-    'enabled': True,                     # 是否启用边框去除
+    'enabled': True,                    # 是否启用边框去除
     'max_iterations': 5,                # 最大迭代次数（多次执行以完全去除边框）
 
     # 水平边框检测参数
     'border_max_width_ratio': 0.2,      # 最大边框宽度占比（左右两侧检测范围）
-    'border_threshold_ratio': 0.35,     # 边框检测阈值（相对于最大投影值的比例）
+    'border_threshold_ratio': 0.3,      # 边框检测阈值（相对于最大投影值的比例）
 
     # 突变检测参数
     'spike_min_length_ratio': 0.02,     # 异常高值段最小长度占检测范围的比例
-    'spike_max_length_ratio': 0.08,      # 异常高值段最大长度占检测范围的比例
+    'spike_max_length_ratio': 0.1,     # 异常高值段最大长度占检测范围的比例
     'spike_gradient_threshold': 0.4,    # 突变梯度阈值（相对于最大投影值）
     'spike_prominence_ratio': 0.5,      # 突出度阈值（峰值相对于周围的突出程度）
-    'edge_tolerance': 4,                # 允许的边缘偏移像素数
+    'edge_tolerance': 3,                # 允许的边缘偏移像素数
 
-    # 垂直边框处理参数 - 使用类似Proj的结构化方案
+    # 垂直边框处理参数 - 使用类似 Proj 的结构化方案
     'vertical_detection_range': {
         'top_ratio': 0.3,       # 上侧检测范围占总高度的比例
         'bottom_ratio': 0.3,    # 下侧检测范围占总高度的比例
     },
 
     'vertical_cut_limits': {
-        'top_max_ratio': 0.5,       # 上侧最大切割比例
-        'bottom_max_ratio': 0.5,    # 下侧最大切割比例
+        'top_max_ratio': 0.2,       # 上侧最大切割比例
+        'bottom_max_ratio': 0.2,    # 下侧最大切割比例
     },
 
-    'debug_verbose': False,              # 是否输出详细的border debug图
+    'debug_verbose': True,              # 是否输出详细的border debug图
 }
 
 NOISE_REMOVAL_CONFIG = {
     'enabled': True,                   # 是否启用杂质色块清理
     'dark_stroke_threshold': 60,       # 深色笔画阈值（<=此值认为是文字主体）
-    'light_noise_threshold': 230,      # 淡色杂质阈值（>深色且<此值的区域为杂质候选）
-    'min_noise_area': 3,               # 最小杂质面积
+    'light_noise_threshold': 240,      # 淡色杂质阈值（>深色且<此值的区域为杂质候选）
+    'min_noise_area': 2,               # 最小杂质面积
     'max_noise_area': 100000,          # 最大杂质面积（绝对像素数）
     'large_noise_area_threshold': 50,  # 大块杂质面积阈值（超过此值认为是杂质而非文字边缘）
 }
 
 # ==================== 6. POSTOCR (质量过滤) ====================
-ARK_VISION_CONFIG = {
+POSTOCR_CONFIG = {
     'enabled': True,                       # 是否启用大模型过滤
-    'base_url': 'https://ark.cn-beijing.volces.com/api/v3', # Ark API 地址
-    'model': 'doubao-seed-1-6-vision-250815',               # 模型名称
-    'api_key_env': 'ARK_API_KEY',          # API Key 环境变量
-    'timeout': 60,                         # 请求超时时间
-    'temperature': 0.0,                    # 采样温度
-    'max_tokens': 256,                     # 最大返回 token 数
+    'provider': 'doubao',                  # 模型提供商: 'doubao' / 'qwen'
     'workers': 16,                         # 并发处理的目录数
+
+    # Doubao (字节跳动) 配置
+    'doubao': {
+        'base_url': 'https://ark.cn-beijing.volces.com/api/v3',
+        'model': 'doubao-seed-1-6-vision-250815',
+        'api_key_env': 'ARK_API_KEY',
+        'timeout': 60,
+        'temperature': 0.0,
+        'max_tokens': 256,
+    },
+
+    # Qwen (阿里云通义千问) 配置
+    'qwen': {
+        'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        'model': 'qwen-vl-ocr-2025-08-28',  # 可选: qwen-vl-max / qwen-vl-ocr-2025-08-28 / qwen3-vl-plus
+        'api_key_env': 'DASHSCOPE_API_KEY',
+        'timeout': 60,
+        'temperature': 0.0,
+        'max_tokens': 512,
+        'enable_thinking': False,           # 仅 qwen3-vl-plus 支持推理模式
+        'thinking_budget': 8192,           # 推理模式最大 token 数
+    },
 }
 
 # ==================== 8. 校验与摘要工具 ====================
@@ -229,9 +247,7 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
             'border_removal': BORDER_REMOVAL_CONFIG,
             'noise_removal': NOISE_REMOVAL_CONFIG,
         },
-        'postocr': {
-            'ark_model': ARK_VISION_CONFIG,
-        },
+        'postocr': POSTOCR_CONFIG,
     }
     if compact:
         return summary
@@ -244,13 +260,13 @@ def config_summary(compact: bool = True) -> Dict[str, Any]:
         'BORDER_REMOVAL_CONFIG': BORDER_REMOVAL_CONFIG,
         'NOISE_REMOVAL_CONFIG': NOISE_REMOVAL_CONFIG,
         'OCR_REMOTE_CONFIG': OCR_REMOTE_CONFIG,
-        'ARK_VISION_CONFIG': ARK_VISION_CONFIG,
+        'POSTOCR_CONFIG': POSTOCR_CONFIG,
     }
 
 __all__ = [
     'PROJECT_ROOT','DATA_DIR','RAW_DIR','RESULTS_DIR','PREPROCESSED_DIR','SEGMENTS_DIR','POSTOCR_DIR','ANALYSIS_DIR','PREOCR_DIR',
     'PREPROCESS_STROKE_HEAL_CONFIG','PREPROCESS_INK_PRESERVE_CONFIG',
     'SEGMENT_REFINE_CONFIG','PROJECTION_TRIM_CONFIG','CC_FILTER_CONFIG','BORDER_REMOVAL_CONFIG','NOISE_REMOVAL_CONFIG',
-    'OCR_REMOTE_CONFIG','ARK_VISION_CONFIG',
+    'OCR_REMOTE_CONFIG','POSTOCR_CONFIG',
     'validate_config','config_summary'
 ]
