@@ -109,9 +109,9 @@ PROJECTION_TRIM_CONFIG = {
 CC_FILTER_CONFIG = {
     'border_touch_margin': 1,           # 实际触边判定范围（像素）
     'edge_zone_margin': 2,              # 边缘区域判定范围（像素）
-    'border_touch_min_area_ratio': 0.02,  # 触边组件最小面积比例
-    'edge_zone_min_area_ratio': 0.01,     # 边缘区域组件最小面积比例
-    'interior_min_area_ratio': 0.002,     # 内部组件最小面积比例
+    'border_touch_min_area_ratio': 0.1, # 触边组件最小面积比例
+    'edge_zone_min_area_ratio': 0.01,   # 边缘区域组件最小面积比例
+    'interior_min_area_ratio': 0.002,   # 内部组件最小面积比例
     'max_aspect_for_edge': 6.0,         # 边缘/触边组件最大长宽比
     'min_dim_px': 2,                    # 边缘/触边组件最小尺寸（宽度或高度的最小值，像素）
     'interior_min_dim_px': 1,           # 内部组件最小尺寸（宽度或高度的最小值，像素）
@@ -122,8 +122,8 @@ BORDER_REMOVAL_CONFIG = {
     'max_iterations': 5,                # 最大迭代次数（多次执行以完全去除边框）
 
     # 水平边框检测参数
-    'border_max_width_ratio': 0.2,      # 最大边框宽度占比（左右两侧检测范围）
-    'border_threshold_ratio': 0.3,      # 边框检测阈值（相对于最大投影值的比例）
+    'border_max_width_ratio': 0.15,      # 最大边框宽度占比（左右两侧检测范围）
+    'border_threshold_ratio': 0.35,      # 边框检测阈值（相对于最大投影值的比例）
 
     # 突变检测参数
     'spike_min_length_ratio': 0.02,     # 异常高值段最小长度占检测范围的比例
@@ -158,8 +158,17 @@ NOISE_REMOVAL_CONFIG = {
 # ==================== 6. POSTOCR (质量过滤) ====================
 POSTOCR_CONFIG = {
     'enabled': True,                       # 是否启用大模型过滤
-    'provider': 'doubao',                  # 模型提供商: 'doubao' / 'qwen'
-    'workers': 16,                         # 并发处理的目录数
+    'mode': 'batch',                       # 推理模式: 'realtime' / 'batch'
+    'provider': 'qwen',                    # 模型提供商: 'doubao' / 'qwen'
+    'workers': 16,                         # 并发处理的目录数（仅 realtime 模式）
+
+    # 批量推理配置（仅 batch 模式）
+    'batch': {
+        'completion_window': '24h',        # 最长等待时间: 24h-336h (支持 h/d 单位)
+        'poll_interval': 60,               # 轮询间隔（秒），建议 60
+        'max_requests_per_batch': 50000,   # 单个任务最多请求数
+        'max_line_size_mb': 6.0,          # 单行最大 6MB（官方限制）
+    },
 
     # Doubao (字节跳动) 配置
     'doubao': {
@@ -174,12 +183,12 @@ POSTOCR_CONFIG = {
     # Qwen (阿里云通义千问) 配置
     'qwen': {
         'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        'model': 'qwen-vl-ocr-2025-08-28',  # 可选: qwen-vl-max / qwen-vl-ocr-2025-08-28 / qwen3-vl-plus
+        'model': 'qwen3-vl-plus',          # 可选: qwen-vl-max-latest / qwen-vl-ocr-latest / qwen3-vl-plus
         'api_key_env': 'DASHSCOPE_API_KEY',
         'timeout': 60,
         'temperature': 0.0,
         'max_tokens': 512,
-        'enable_thinking': False,           # 仅 qwen3-vl-plus 支持推理模式
+        'enable_thinking': 'auto',         # 'auto': 自动判断（qwen3-vl-plus 启用）/ True: 强制启用 / False: 强制禁用
         'thinking_budget': 8192,           # 推理模式最大 token 数
     },
 }

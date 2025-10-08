@@ -1,4 +1,4 @@
-"""Doubao vision client for post-OCR filtering."""
+"""Vision model client for post-OCR filtering (supports multiple providers)."""
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
@@ -10,7 +10,7 @@ from openai import OpenAI
 
 
 @dataclass
-class ArkVisionConfig:
+class VisionConfig:
     base_url: str
     model: str
     api_key_env: str = 'ARK_API_KEY'
@@ -30,11 +30,11 @@ class ArkVisionConfig:
     )
 
 
-class ArkVisionClient:
-    def __init__(self, cfg: ArkVisionConfig):
+class VisionClient:
+    def __init__(self, cfg: VisionConfig):
         api_key = os.getenv(cfg.api_key_env)
         if not api_key:
-            raise RuntimeError(f"环境变量 {cfg.api_key_env} 未设置，无法调用 Ark 模型")
+            raise RuntimeError(f"环境变量 {cfg.api_key_env} 未设置，无法调用视觉模型")
         self.cfg = cfg
         self.client = OpenAI(base_url=cfg.base_url, api_key=api_key)
 
@@ -92,10 +92,10 @@ class ArkVisionClient:
             delta = chunk.choices[0].delta
 
             # 收集推理过程
-            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+            if hasattr(delta, 'reasoning_content') and delta.reasoning_content is not None:
                 reasoning_content += delta.reasoning_content
             # 收集回复内容
-            if delta.content:
+            if hasattr(delta, 'content') and delta.content is not None:
                 answer_content += delta.content
 
         duration = time.time() - start
