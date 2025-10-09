@@ -143,16 +143,67 @@ BORDER_REMOVAL_CONFIG = {
         'bottom_max_ratio': 0.2,    # 下侧最大切割比例
     },
 
-    'debug_verbose': True,              # 是否输出详细的border debug图
+    'debug_verbose': False,              # 是否输出详细的border debug图
 }
 
 NOISE_REMOVAL_CONFIG = {
     'enabled': True,                   # 是否启用杂质色块清理
-    'dark_stroke_threshold': 60,       # 深色笔画阈值（<=此值认为是文字主体）
+
+    # 阈值参数
+    'dark_stroke_threshold': 50,       # 深色笔画阈值（<=此值认为是文字主体）
     'light_noise_threshold': 240,      # 淡色杂质阈值（>深色且<此值的区域为杂质候选）
-    'min_noise_area': 2,               # 最小杂质面积
-    'max_noise_area': 100000,          # 最大杂质面积（绝对像素数）
-    'large_noise_area_threshold': 50,  # 大块杂质面积阈值（超过此值认为是杂质而非文字边缘）
+    'min_stroke_area': 6,             # 最小笔画面积（过滤小于此值的深色点，避免误判为笔画）
+    'min_noise_area': 2,               # 最小杂质面积（太小的保留）
+    'max_noise_area': 200000,          # 最大杂质面积（太大的直接判定为噪声）
+
+    # 综合判断参数
+    'noise_threshold': 0.4,            # 综合得分阈值（>此值判定为噪声）
+
+    # 智能去除参数
+    'smart_removal_preserve_distance': 1.0,  # 保留距离阈值（像素）：<此距离的像素视为笔画边缘保留
+
+    # === 形态特征详细参数 ===
+    'morphology': {
+        'aspect_ratio': {
+            'edge_threshold': 5.0,      # 长宽比 > 此值 → 狭长边缘特征
+            'noise_threshold': 2.0,     # 长宽比 < 此值 → 块状噪声特征
+            'weight': 0.4,              # 长宽比在形态特征中的权重
+        },
+        'solidity': {
+            'edge_threshold': 0.8,      # 凸包率 > 此值 → 规则边缘
+            'noise_threshold': 0.5,     # 凸包率 < 此值 → 不规则噪声
+            'weight': 0.3,              # 凸包率在形态特征中的权重
+        },
+        'perimeter_area': {
+            'edge_threshold': 50.0,     # 周长面积比 > 此值 → 狭长边缘
+            'noise_threshold': 20.0,    # 周长面积比 < 此值 → 紧凑噪声
+            'weight': 0.3,              # 周长面积比在形态特征中的权重
+        },
+    },
+
+    # === 距离特征详细参数 ===
+    'distance': {
+        'mean_distance': {
+            'edge_threshold': 1.5,      # 平均距离 < 此值(像素) → 紧贴笔画
+            'noise_threshold': 2.0,     # 平均距离 > 此值(像素) → 远离笔画
+            'weight': 0.5,              # 平均距离在距离特征中的权重
+        },
+        'distance_cv': {
+            'edge_threshold': 0.2,      # 距离变异系数 < 此值 → 一致分布
+            'noise_threshold': 0.25,     # 距离变异系数 > 此值 → 不一致分布
+            'weight': 0.5,              # 变异系数在距离特征中的权重
+        },
+    },
+
+    # === 特征权重（只保留形态和距离） ===
+    'feature_weights': {
+        'morphology': 0.4,             # 形态特征总权重
+        'distance': 0.6,               # 距离特征总权重
+    },
+
+    # Debug参数
+    'debug_features': False,           # 是否输出每个区域的特征得分（控制台）
+    'debug_visualize': True,          # 是否生成可视化debug图像（保存到debug目录）
 }
 
 # ==================== 6. POSTOCR (质量过滤) ====================

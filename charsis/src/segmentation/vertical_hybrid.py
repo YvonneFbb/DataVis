@@ -663,12 +663,24 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
         roi = img[y0:y1, x0:x1]
         if roi.size == 0:
             continue
+
+        # Skip tiny images (likely noise or artifacts)
+        roi_h, roi_w = roi.shape[:2]
+        if roi_w < 10 or roi_h < 10:
+            continue
+
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
         # Noise patch removal (before binarization)
         gray_cleaned = gray.copy()
+        noise_debug_img = None
         if NOISE_REMOVAL_CONFIG.get('enabled', True):
-            gray_cleaned = remove_noise_patches(gray_cleaned, NOISE_REMOVAL_CONFIG)
+            result = remove_noise_patches(gray_cleaned, NOISE_REMOVAL_CONFIG)
+            # Handle potential debug output
+            if isinstance(result, tuple):
+                gray_cleaned, noise_debug_img = result
+            else:
+                gray_cleaned = result
 
         bin_before = binarize(
             gray_cleaned,
@@ -731,16 +743,30 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
 
         fname = f"char_{b['order']:04d}.png"
         cv2.imwrite(os.path.join(output_dir, fname), crop)
+
+        # Prepare debug output directory
+        out_dbg = os.path.join(output_dir, dbg_dirname)
+
+        # Save noise removal debug image (independent of main debug)
+        if noise_debug_img is not None:
+            try:
+                _ensure_dir(out_dbg)
+                noise_dbg_name = f"{os.path.splitext(fname)[0]}_noise_debug.png"
+                cv2.imwrite(os.path.join(out_dbg, noise_dbg_name), noise_debug_img)
+            except Exception as e:
+                print(f"[NOISE DEBUG ERROR] Failed to save noise debug for {fname}: {e}")
+
+        # Main debug visualization (all stages)
         if dbg_enabled:
             try:
+                _ensure_dir(out_dbg)
+
                 # Pass all stages to show the complete pipeline (4 stages: noise, cc, proj, border)
                 dbg_img = _render_combined_debug(roi, gray, gray_cleaned, bin_before, bin_after,
                                                 crop_before_border, crop_after_border,
                                                 int(xl_proj), int(xr_proj), int(yt_proj), int(yb_proj),
                                                 int(xl_border), int(xr_border), int(yt_border), int(yb_border))
                 dbg_name = f"{os.path.splitext(fname)[0]}_debug.png"
-                out_dbg = os.path.join(output_dir, dbg_dirname)
-                _ensure_dir(out_dbg)
                 cv2.imwrite(os.path.join(out_dbg, dbg_name), dbg_img)
 
                 # Generate border detection debug image (verbose version)
@@ -760,6 +786,7 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
                     )
                     border_dbg_name = f"{os.path.splitext(fname)[0]}_border_debug.png"
                     cv2.imwrite(os.path.join(out_dbg, border_dbg_name), border_debug_img)
+
             except Exception as e:
                 # Log debug failure with character information
                 error_msg = f"DEBUG FAILURE for {fname}: {type(e).__name__}: {str(e)}"
