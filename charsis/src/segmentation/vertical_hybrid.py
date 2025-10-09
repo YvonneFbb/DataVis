@@ -690,11 +690,12 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
         )
 
         # choose CC filtering according to mode
+        cc_debug_img = None
         if mode == 'projection_only':
             bin_after = bin_before.copy()  # skip CC filtering
         else:
             bin_after = bin_before.copy()
-            refine_binary_components(bin_after, CC_FILTER_CONFIG)
+            bin_after, cc_debug_img = refine_binary_components(bin_after, CC_FILTER_CONFIG, gray_cleaned)
         if mode == 'cc_debug':
             # no projection trimming; use full ROI as crop
             xl, xr, yt, yb = 0, roi.shape[1], 0, roi.shape[0]
@@ -756,6 +757,15 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
             except Exception as e:
                 print(f"[NOISE DEBUG ERROR] Failed to save noise debug for {fname}: {e}")
 
+        # Save CC filter debug image (independent of main debug)
+        if cc_debug_img is not None:
+            try:
+                _ensure_dir(out_dbg)
+                cc_dbg_name = f"{os.path.splitext(fname)[0]}_cc_debug.png"
+                cv2.imwrite(os.path.join(out_dbg, cc_dbg_name), cc_debug_img)
+            except Exception as e:
+                print(f"[CC DEBUG ERROR] Failed to save CC debug for {fname}: {e}")
+
         # Main debug visualization (all stages)
         if dbg_enabled:
             try:
@@ -814,40 +824,126 @@ def run_on_image(image_path: str, output_dir: str, expected_text: str | None = N
     # Create processed image assembly: white background with processed characters placed back
     overlay_processed = np.full_like(img, 255, dtype=np.uint8)  # Start with white background
 
-    # Place processed characters back in their original positions
+    # Place processed characters back in their original positions with overlap avoidance
     if chars_meta:
+        # Track occupied regions to avoid overlap
+        occupied_regions = []  # List of (x, y, w, h) tuples
+
+        def check_overlap(x1, y1, w1, h1, x2, y2, w2, h2):
+            """Check if two rectangles overlap"""
+            return not (x1 + w1 <= x2 or x2 + w2 <= x1 or y1 + h1 <= y2 or y2 + h2 <= y1)
+
+        def find_non_overlapping_position(rx, ry, rw, rh, occupied):
+            """Find a non-overlapping position by shifting vertically (unlimited, can extend beyond boundaries)"""
+            # Try original position first
+            has_overlap = False
+            for occupied_rect in occupied:
+                ox, oy, ow, oh = occupied_rect
+                if check_overlap(rx, ry, rw, rh, ox, oy, ow, oh):
+                    has_overlap = True
+                    break
+
+            if not has_overlap:
+                return rx, ry  # Original position is fine
+
+            # Try shifting down until no overlap (no boundary limit)
+            new_y = ry + 1
+            max_iterations = 10000  # Safety limit to prevent infinite loop
+            iteration = 0
+            while iteration < max_iterations:
+                overlap_found = False
+                for occupied_rect in occupied:
+                    ox, oy, ow, oh = occupied_rect
+                    if check_overlap(rx, new_y, rw, rh, ox, oy, ow, oh):
+                        overlap_found = True
+                        break
+                if not overlap_found:
+                    return rx, new_y
+                new_y += 1
+                iteration += 1
+
+            # Try shifting up until no overlap (can go negative)
+            new_y = ry - 1
+            iteration = 0
+            while iteration < max_iterations:
+                overlap_found = False
+                for occupied_rect in occupied:
+                    ox, oy, ow, oh = occupied_rect
+                    if check_overlap(rx, new_y, rw, rh, ox, oy, ow, oh):
+                        overlap_found = True
+                        break
+                if not overlap_found:
+                    return rx, new_y
+                new_y -= 1
+                iteration += 1
+
+            # If still no space found (extremely unlikely), return original position
+            return rx, ry
+
+        # First pass: determine all final positions and required canvas size
+        placements = []  # List of (crop_img, final_x, final_y, rw, rh)
+        min_y = 0
+        max_y = overlay_processed.shape[0]
+
         for idx, meta in enumerate(chars_meta):
             crop_path = os.path.join(output_dir, meta['filename'])
             if os.path.exists(crop_path):
                 crop_img = cv2.imread(crop_path)
                 if crop_img is not None:
-                    # Get the refined bbox position where the character should be placed
+                    # Use refined bbox for placement, but adjust for overlap
                     rx, ry, rw, rh = meta['refined_bbox']
 
-                    # Resize crop to fit the refined bbox if necessary
+                    # Find non-overlapping position
+                    final_x, final_y = find_non_overlapping_position(rx, ry, rw, rh, occupied_regions)
+
+                    # Resize crop to fit the refined bbox
                     if crop_img.shape[:2] != (rh, rw):
                         crop_img_resized = cv2.resize(crop_img, (rw, rh))
                     else:
                         crop_img_resized = crop_img
 
-                    # Ensure the placement area is within image bounds
-                    y_start = max(0, ry)
-                    y_end = min(overlay_processed.shape[0], ry + rh)
-                    x_start = max(0, rx)
-                    x_end = min(overlay_processed.shape[1], rx + rw)
+                    placements.append((crop_img_resized, final_x, final_y, rw, rh))
 
-                    # Adjust crop size if placement area is clipped
-                    crop_h = y_end - y_start
-                    crop_w = x_end - x_start
-                    if crop_h > 0 and crop_w > 0:
-                        if crop_h != rh or crop_w != rw:
-                            crop_img_resized = cv2.resize(crop_img_resized, (crop_w, crop_h))
+                    # Mark this region as occupied
+                    occupied_regions.append((final_x, final_y, rw, rh))
 
-                        # Place the processed character in the refined position
-                        overlay_processed[y_start:y_end, x_start:x_end] = crop_img_resized
+                    # Track vertical extent
+                    min_y = min(min_y, final_y)
+                    max_y = max(max_y, final_y + rh)
 
-                    # Draw bounding box on processed side to show the cutting boundary (darker green for better visibility)
-                    cv2.rectangle(overlay_processed, (rx, ry), (rx + rw - 1, ry + rh - 1), (0, 180, 0), 2)
+        # Expand canvas if needed
+        if min_y < 0 or max_y > overlay_processed.shape[0]:
+            original_height = overlay_processed.shape[0]
+            new_height = max_y - min_y
+            y_offset = -min_y  # Offset to shift all positions to positive coordinates
+
+            # Create expanded canvas
+            overlay_processed_expanded = np.full((new_height, overlay_processed.shape[1], 3), 255, dtype=np.uint8)
+
+            # Expand overlay_original to match new height
+            overlay_original_expanded = np.full((new_height, overlay_original.shape[1], 3), 255, dtype=np.uint8)
+            overlay_original_expanded[y_offset:y_offset + original_height, :] = overlay_original
+
+            # Update references
+            overlay_processed = overlay_processed_expanded
+            overlay_original = overlay_original_expanded
+
+            # Second pass: place characters with adjusted coordinates
+            for crop_img_resized, final_x, final_y, rw, rh in placements:
+                adjusted_y = final_y + y_offset
+                overlay_processed[adjusted_y:adjusted_y + rh, final_x:final_x + rw] = crop_img_resized
+
+                # Draw bounding box (darker green)
+                cv2.rectangle(overlay_processed, (final_x, adjusted_y),
+                            (final_x + rw - 1, adjusted_y + rh - 1), (0, 180, 0), 2)
+        else:
+            # No expansion needed, place directly
+            for crop_img_resized, final_x, final_y, rw, rh in placements:
+                overlay_processed[final_y:final_y + rh, final_x:final_x + rw] = crop_img_resized
+
+                # Draw bounding box (darker green)
+                cv2.rectangle(overlay_processed, (final_x, final_y),
+                            (final_x + rw - 1, final_y + rh - 1), (0, 180, 0), 2)
 
     # Create side-by-side comparison
     gap_width = 20

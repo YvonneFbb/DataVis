@@ -68,10 +68,10 @@ SEGMENT_REFINE_CONFIG = {
     'enabled': True,            # 是否启用分割精修
     'mode': 'ccprojection',     # 模式：ccprojection / projection_only / cc_debug
     'expand_px': {              # ROI 额外扩张像素（分别对应左右上下）
-        'left': 2,
-        'right': 2,
+        'left': 4,
+        'right': 4,
         'top': 10,
-        'bottom': 2,
+        'bottom': 4,
     },
     'final_pad': 0,             # 裁剪后的统一回填像素
     'debug_visualize': True,    # 是否输出调试图
@@ -109,12 +109,14 @@ PROJECTION_TRIM_CONFIG = {
 CC_FILTER_CONFIG = {
     'border_touch_margin': 1,           # 实际触边判定范围（像素）
     'edge_zone_margin': 2,              # 边缘区域判定范围（像素）
-    'border_touch_min_area_ratio': 0.1, # 触边组件最小面积比例
+    'border_touch_min_area_ratio': 0.04,# 触边组件最小面积比例
     'edge_zone_min_area_ratio': 0.01,   # 边缘区域组件最小面积比例
     'interior_min_area_ratio': 0.002,   # 内部组件最小面积比例
     'max_aspect_for_edge': 6.0,         # 边缘/触边组件最大长宽比
     'min_dim_px': 2,                    # 边缘/触边组件最小尺寸（宽度或高度的最小值，像素）
     'interior_min_dim_px': 1,           # 内部组件最小尺寸（宽度或高度的最小值，像素）
+
+    'debug_visualize': False,            # 是否生成详细的 CC debug 图
 }
 
 BORDER_REMOVAL_CONFIG = {
@@ -130,7 +132,7 @@ BORDER_REMOVAL_CONFIG = {
     'spike_max_length_ratio': 0.1,     # 异常高值段最大长度占检测范围的比例
     'spike_gradient_threshold': 0.4,    # 突变梯度阈值（相对于最大投影值）
     'spike_prominence_ratio': 0.5,      # 突出度阈值（峰值相对于周围的突出程度）
-    'edge_tolerance': 3,                # 允许的边缘偏移像素数
+    'edge_tolerance': 2,                # 允许的边缘偏移像素数
 
     # 垂直边框处理参数 - 使用类似 Proj 的结构化方案
     'vertical_detection_range': {
@@ -150,7 +152,7 @@ NOISE_REMOVAL_CONFIG = {
     'enabled': True,                   # 是否启用杂质色块清理
 
     # 阈值参数
-    'dark_stroke_threshold': 50,       # 深色笔画阈值（<=此值认为是文字主体）
+    'dark_stroke_threshold': 60,       # 深色笔画阈值（<=此值认为是文字主体）
     'light_noise_threshold': 240,      # 淡色杂质阈值（>深色且<此值的区域为杂质候选）
     'min_stroke_area': 6,             # 最小笔画面积（过滤小于此值的深色点，避免误判为笔画）
     'min_noise_area': 2,               # 最小杂质面积（太小的保留）
@@ -203,7 +205,7 @@ NOISE_REMOVAL_CONFIG = {
 
     # Debug参数
     'debug_features': False,           # 是否输出每个区域的特征得分（控制台）
-    'debug_visualize': True,          # 是否生成可视化debug图像（保存到debug目录）
+    'debug_visualize': False,          # 是否生成可视化debug图像（保存到debug目录）
 }
 
 # ==================== 6. POSTOCR (质量过滤) ====================
