@@ -30,6 +30,30 @@ from src.postocr.batch_client import BatchClient, BatchConfig
 logger = logging.getLogger(__name__)
 
 
+def _is_qwen_thinking_supported(model: str) -> bool:
+    """Auto-detect models that support enable_thinking per provider docs.
+
+    Supported families include (non-exhaustive):
+      - qwen3-vl-plus, qwen-vl-plus, qwen-vl-plus-latest
+      - qwen-plus, qwen-plus-latest
+      - qwen-flash
+      - qwen-turbo, qwen-turbo-latest
+    Excludes: qwq-plus, deepseek-r1 (explicitly not supported in docs)
+    """
+    m = (model or '').lower()
+    if not m:
+        return False
+    if 'qwq-plus' in m or 'deepseek-r1' in m:
+        return False
+    keywords = (
+        'qwen3-vl-plus', 'qwen-vl-plus', 'qwen-vl-plus-latest',
+        'qwen-plus', 'qwen-plus-latest',
+        'qwen-flash',
+        'qwen-turbo', 'qwen-turbo-latest',
+    )
+    return any(k in m for k in keywords)
+
+
 def _safe_filename(text: str, max_length: int = 20) -> str:
     text = (text or '').strip()
     if not text:
@@ -174,7 +198,7 @@ def _build_vision_config() -> Optional[VisionConfig]:
 
     # 处理 enable_thinking 配置
     if enable_thinking_cfg == 'auto':
-        enable_thinking = 'qwen3-vl-plus' in model.lower()
+        enable_thinking = _is_qwen_thinking_supported(model)
     else:
         enable_thinking = bool(enable_thinking_cfg)
 
@@ -267,7 +291,13 @@ def filter_character_dir(input_dir: str, output_dir: str,
         try:
             keep, evaluation = _evaluate_image(src_path, client)
             character = evaluation.get('character') if evaluation else None
-            if keep and character:
+            # 若模型未输出合法 JSON，标记为 error，便于统一重试
+            if evaluation and evaluation.get('parsed') is None:
+                dst_name = f"reject_{idx:03d}.png"
+                shutil.copy2(src_path, os.path.join(output_dir, dst_name))
+                stats['error'] += 1
+                record.update({'status': 'error', 'error': 'json_parse_error', 'output_file': dst_name})
+            elif keep and character:
                 safe_char = _safe_filename(character)
                 dst_name = f"{idx:03d}_{safe_char}.png"
                 shutil.copy2(src_path, os.path.join(output_dir, dst_name))
@@ -323,8 +353,8 @@ def filter_character_dir_batch(input_dir: str, output_dir: str,
 
     # 处理 enable_thinking 配置
     if enable_thinking_cfg == 'auto':
-        # auto 模式：qwen3-vl-plus 自动启用 thinking
-        enable_thinking = 'qwen3-vl-plus' in model.lower()
+        # auto 模式：按文档支持的系列自动启用 thinking
+        enable_thinking = _is_qwen_thinking_supported(model)
     else:
         # 强制模式：true/false
         enable_thinking = bool(enable_thinking_cfg)
@@ -380,6 +410,17 @@ def filter_character_dir_batch(input_dir: str, output_dir: str,
         content = item.get('content', '')
         evaluation = _parse_ark_response(content)
         evaluation['response_time'] = 0  # 批量模式无单个响应时间
+
+        # 若模型未输出合法 JSON，标记为 error，便于统一重试
+        if evaluation and evaluation.get('parsed') is None:
+            idx = char_files.index(original_file) + 1
+            dst_name = f"reject_{idx:03d}.png"
+            shutil.copy2(src_path, os.path.join(output_dir, dst_name))
+            stats['error'] += 1
+            record.update({'status': 'error', 'error': 'json_parse_error', 'output_file': dst_name})
+            record['ark_evaluation'] = evaluation
+            entries.append(record)
+            continue
 
         character = evaluation.get('character')
         keep = (
@@ -441,6 +482,11 @@ def process_all_segment_results(input_base_dir: str | None = None,
     mode = str(POSTOCR_CONFIG.get('mode', 'realtime')).lower()
     provider = str(POSTOCR_CONFIG.get('provider', 'qwen')).lower()
     provider_cfg = POSTOCR_CONFIG.get(provider, {})
+
+    # 若选择了 batch 模式但 provider 非 qwen（阿里云百炼 Batch），则回退到 realtime，并提示
+    if mode == 'batch' and provider != 'qwen':
+        print("PostOCR: 当前 provider 非 qwen，不支持 Batch，自动回退到 realtime 模式")
+        mode = 'realtime'
 
     batch = {
         'total_dirs': len(candidate_dirs),
@@ -581,7 +627,7 @@ def process_all_segment_results(input_base_dir: str | None = None,
             try:
                 # 生成 JSONL（使用唯一的 custom_ids）
                 jsonl_path = os.path.join(image_work_dir, 'batch_input.jsonl')
-                success_count, skipped_count = batch_client.generate_jsonl(
+                success_count, skipped_count, jsonl_info = batch_client.generate_jsonl(
                     image_paths=all_image_paths,
                     system_prompt=system_prompt,
                     model=model,
@@ -601,15 +647,26 @@ def process_all_segment_results(input_base_dir: str | None = None,
                 file_id = batch_client.upload_file(jsonl_path)
 
                 # 创建批量任务
-                batch_id = batch_client.create_batch(file_id, task_name=image_name)
+                # 透传可选的回调地址（ds_batch_finish_callback），仅在 qwen provider 生效
+                metadata_extra = {}
+                callback_url = provider_cfg.get('ds_batch_finish_callback') if isinstance(provider_cfg, dict) else None
+                if callback_url:
+                    metadata_extra['ds_batch_finish_callback'] = callback_url
+                batch_id = batch_client.create_batch(file_id, task_name=image_name, metadata_extra=metadata_extra)
 
                 # 保存映射信息（包含状态追踪）
                 mapping_file = os.path.join(image_work_dir, 'file_mapping.json')
                 current_time = time.time()
+                success_ids = set(jsonl_info.get('success_ids', []))
+                skipped_oversize_ids = set(jsonl_info.get('skipped_oversize_ids', []))
+                skipped_error_ids = set(jsonl_info.get('skipped_error_ids', []))
+                skipped_duplicate_ids = set(jsonl_info.get('skipped_duplicate_ids', []))
                 with open(mapping_file, 'w', encoding='utf-8') as f:
                     json.dump({
                         'image_name': image_name,
                         'total_files': len(all_image_paths),
+                        'requested_files': len(success_ids),
+                        'skipped_files': int(skipped_count),
                         'first_submitted': current_time,
                         'last_updated': current_time,
                         'batch_history': [
@@ -622,7 +679,15 @@ def process_all_segment_results(input_base_dir: str | None = None,
                                 'abs_dir': a,
                                 'rel_dir': r,
                                 'custom_id': c,
-                                'status': 'submitted',
+                                'status': (
+                                    'submitted' if c in success_ids else (
+                                        'skipped_duplicate_id' if c in skipped_duplicate_ids else (
+                                            'skipped_oversize' if c in skipped_oversize_ids else (
+                                                'skipped_error' if c in skipped_error_ids else 'skipped'
+                                            )
+                                        )
+                                    )
+                                ),
                                 'first_batch_id': batch_id,
                                 'last_batch_id': batch_id,
                             }
@@ -637,6 +702,7 @@ def process_all_segment_results(input_base_dir: str | None = None,
                     'status': 'submitted',
                     'timestamp': time.time(),
                     'total_files': len(all_image_paths),
+                    'requested_files': len(success_ids),
                     'image_name': image_name,
                 }
                 with open(state_file, 'w', encoding='utf-8') as f:
@@ -647,6 +713,7 @@ def process_all_segment_results(input_base_dir: str | None = None,
                     'batch_id': batch_id,
                     'work_dir': image_work_dir,
                     'total_files': len(all_image_paths),
+                    'requested_files': len(success_ids),
                     'dirs': dirs
                 })
 
@@ -861,6 +928,7 @@ def wait_and_process_batch_tasks(output_base_dir: str) -> Dict[str, Any]:
                 results_by_dir[rel_dir].append((item, abs_dir, mapping['image_path']))
 
             # 为每个目录处理结果
+            parse_failed_ids_total = set()
             for rel_dir, dir_results in results_by_dir.items():
                 out_dir = os.path.join(output_base_dir, rel_dir)
                 ensure_dir(out_dir)
@@ -896,6 +964,10 @@ def wait_and_process_batch_tasks(output_base_dir: str) -> Dict[str, Any]:
                     evaluation = _parse_ark_response(content)
                     evaluation['response_time'] = 0
 
+                    # 记录 JSON 解析失败，用于后续映射与重试
+                    if evaluation and evaluation.get('parsed') is None:
+                        parse_failed_ids_total.add(item.get('custom_id'))
+
                     character = evaluation.get('character')
                     keep = (
                         bool(evaluation.get('single_character')) and
@@ -905,7 +977,14 @@ def wait_and_process_batch_tasks(output_base_dir: str) -> Dict[str, Any]:
                     )
 
                     # 使用原文件编号，保持增量更新时编号稳定
-                    if keep and character:
+                    if evaluation and evaluation.get('parsed') is None:
+                        dst_name = f"reject_{file_idx:03d}.png" if file_idx > 0 else "reject.png"
+                        dst_path = os.path.join(out_dir, dst_name)
+                        if not os.path.exists(dst_path):
+                            shutil.copy2(src_path, dst_path)
+                        stats['error'] += 1
+                        record.update({'status': 'error', 'error': 'json_parse_error', 'output_file': dst_name})
+                    elif keep and character:
                         safe_char = _safe_filename(character)
                         dst_name = f"{file_idx:03d}_{safe_char}.png" if file_idx > 0 else f"{safe_char}.png"
                         dst_path = os.path.join(out_dir, dst_name)
@@ -967,6 +1046,9 @@ def wait_and_process_batch_tasks(output_base_dir: str) -> Dict[str, Any]:
                     # 成功处理
                     mapping_entry['status'] = 'success'
                     mapping_entry['last_batch_id'] = task['batch_id']
+                if parse_failed_ids_total and custom_id in parse_failed_ids_total:
+                    mapping_entry['status'] = 'json_parse_failed'
+                    mapping_entry['last_batch_id'] = task['batch_id']
                 elif custom_id in error_map:
                     # 处理失败
                     mapping_entry['status'] = 'failed'
@@ -1026,8 +1108,8 @@ def retry_failed_requests(output_base_dir: str, mode: str = 'batch') -> Dict[str
 
     print(f"找到 {len(batch_work_dirs)} 个批量任务目录\n")
 
-    # 收集所有失败的请求
-    failed_requests = []  # [(custom_id, error_code, error_msg, image_path, abs_dir, rel_dir), ...]
+    # 收集所有失败的请求（包含平台错误与JSON解析失败）
+    failed_requests = []  # [{custom_id, error_code, error_msg, image_path, abs_dir, rel_dir}, ...]
 
     for work_dir in batch_work_dirs:
         error_file = os.path.join(work_dir, 'batch_errors.jsonl')
@@ -1049,35 +1131,60 @@ def retry_failed_requests(output_base_dir: str, mode: str = 'batch') -> Dict[str
             for m in mapping_info['mapping']
         }
 
-        # 读取错误文件
-        with open(error_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    error_item = json.loads(line)
-                    custom_id = error_item.get('custom_id')
-                    error_info = error_item.get('error', {})
-                    error_code = error_info.get('code', 'unknown')
-                    error_msg = error_info.get('message', '')
-
-                    # 获取映射信息
-                    mapping = id_to_mapping.get(custom_id)
-                    if not mapping:
-                        logger.warning(f"未找到映射: {custom_id}")
+        # 读取错误文件（平台侧错误）
+        try:
+            with open(error_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if not line.strip():
                         continue
+                    try:
+                        error_item = json.loads(line)
+                        custom_id = error_item.get('custom_id')
+                        error_info = error_item.get('error', {})
+                        error_code = error_info.get('code', 'unknown')
+                        error_msg = error_info.get('message', '')
 
-                    failed_requests.append({
-                        'custom_id': custom_id,
-                        'error_code': error_code,
-                        'error_msg': error_msg,
-                        'image_path': mapping['image_path'],
-                        'abs_dir': mapping['abs_dir'],
-                        'rel_dir': mapping['rel_dir']
-                    })
-                except Exception as e:
-                    logger.warning(f"解析错误行失败: {e}")
-                    continue
+                        # 获取映射信息
+                        mapping = id_to_mapping.get(custom_id)
+                        if not mapping:
+                            logger.warning(f"未找到映射: {custom_id}")
+                            continue
+
+                        failed_requests.append({
+                            'custom_id': custom_id,
+                            'error_code': error_code,
+                            'error_msg': error_msg,
+                            'image_path': mapping['image_path'],
+                            'abs_dir': mapping['abs_dir'],
+                            'rel_dir': mapping['rel_dir']
+                        })
+                    except Exception as e:
+                        logger.warning(f"解析错误行失败: {e}")
+                        continue
+        except FileNotFoundError:
+            pass
+
+        # 合并“JSON 解析失败”的请求（在映射中标记为 json_parse_failed）
+        for m in mapping_info.get('mapping', []):
+            if m.get('status') == 'json_parse_failed':
+                failed_requests.append({
+                    'custom_id': m.get('custom_id'),
+                    'error_code': 'JSON_PARSE',
+                    'error_msg': 'LLM returned non-JSON content',
+                    'image_path': m.get('image_path'),
+                    'abs_dir': m.get('abs_dir'),
+                    'rel_dir': m.get('rel_dir')
+                })
+            # 合并“重复 custom_id 被跳过”的请求，便于重新打包提交（这次会去重）
+            if m.get('status') == 'skipped_duplicate_id':
+                failed_requests.append({
+                    'custom_id': m.get('custom_id'),
+                    'error_code': 'DUPLICATE_CUSTOM_ID',
+                    'error_msg': 'Duplicate custom_id skipped in previous batch',
+                    'image_path': m.get('image_path'),
+                    'abs_dir': m.get('abs_dir'),
+                    'rel_dir': m.get('rel_dir')
+                })
 
     print(f"收集到 {len(failed_requests)} 个失败请求")
 
@@ -1249,7 +1356,7 @@ def _retry_with_batch(output_base_dir: str, retry_list: List[Dict[str, Any]],
                     mapping_dict[custom_id]['status'] = 'retrying'
             # 生成 JSONL（使用原来的 custom_ids）
             jsonl_path = os.path.join(retry_work_dir, 'retry_batch_input.jsonl')
-            success_count, skipped_count = batch_client.generate_jsonl(
+            success_count, skipped_count, jsonl_info = batch_client.generate_jsonl(
                 image_paths=image_paths,
                 system_prompt=system_prompt,
                 model=model,
@@ -1261,6 +1368,21 @@ def _retry_with_batch(output_base_dir: str, retry_list: List[Dict[str, Any]],
                 custom_ids=custom_ids
             )
 
+            # 根据 JSONL 生成结果，细化重试文件的状态
+            success_ids = set(jsonl_info.get('success_ids', []))
+            skipped_oversize_ids = set(jsonl_info.get('skipped_oversize_ids', []))
+            skipped_error_ids = set(jsonl_info.get('skipped_error_ids', []))
+            skipped_duplicate_ids = set(jsonl_info.get('skipped_duplicate_ids', []))
+            for cid in retry_custom_ids:
+                if cid in success_ids:
+                    mapping_dict.get(cid, {}).update({'status': 'submitted'})
+                elif cid in skipped_oversize_ids:
+                    mapping_dict.get(cid, {}).update({'status': 'skipped_oversize'})
+                elif cid in skipped_error_ids:
+                    mapping_dict.get(cid, {}).update({'status': 'skipped_error'})
+                elif cid in skipped_duplicate_ids:
+                    mapping_dict.get(cid, {}).update({'status': 'skipped_duplicate_id'})
+
             if success_count == 0:
                 logger.error(f"{image_name}: 没有成功生成任何请求")
                 continue
@@ -1269,7 +1391,12 @@ def _retry_with_batch(output_base_dir: str, retry_list: List[Dict[str, Any]],
             file_id = batch_client.upload_file(jsonl_path)
 
             # 创建批量任务
-            batch_id = batch_client.create_batch(file_id, task_name=f"{image_name}_retry")
+            # 透传可选的回调地址（ds_batch_finish_callback）
+            metadata_extra = {}
+            callback_url = provider_cfg.get('ds_batch_finish_callback') if isinstance(provider_cfg, dict) else None
+            if callback_url:
+                metadata_extra['ds_batch_finish_callback'] = callback_url
+            batch_id = batch_client.create_batch(file_id, task_name=f"{image_name}_retry", metadata_extra=metadata_extra)
 
             # 保存/更新状态（追加到现有状态）
             state_file = os.path.join(retry_work_dir, 'batch_state.json')

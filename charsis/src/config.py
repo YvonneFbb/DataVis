@@ -241,7 +241,7 @@ POSTOCR_CONFIG = {
         'timeout': 60,
         'temperature': 0.0,
         'max_tokens': 512,
-        'enable_thinking': 'auto',         # 'auto': 自动判断（qwen3-vl-plus 启用）/ True: 强制启用 / False: 强制禁用
+        'enable_thinking': 'False',         # 'auto': 自动判断（qwen3-vl-plus 启用）/ True: 强制启用 / False: 强制禁用
         'thinking_budget': 8192,           # 推理模式最大 token 数
     },
 }

@@ -56,7 +56,7 @@ class BatchClient:
                        thinking_budget: int = 8192,
                        max_tokens: int = 512,
                        temperature: float = 0.0,
-                       custom_ids: Optional[List[str]] = None) -> Tuple[int, int]:
+                       custom_ids: Optional[List[str]] = None) -> Tuple[int, int, Dict[str, List[str]]]:
         """
         生成批量推理的 JSONL 文件
 
@@ -74,12 +74,32 @@ class BatchClient:
 
         success_count = 0
         skipped_count = 0
+        success_ids: List[str] = []
+        skipped_oversize_ids: List[str] = []
+        skipped_error_ids: List[str] = []
+        skipped_duplicate_ids: List[str] = []
+        seen_ids: set[str] = set()
 
         with open(output_path, 'w', encoding='utf-8') as f:
             for idx, image_path in enumerate(image_paths):
                 try:
                     # 编码图片
                     image_b64 = self._encode_image(image_path)
+
+                    # 根据扩展名选择合适的 MIME（避免与源文件不一致）
+                    ext = os.path.splitext(image_path)[1].lower()
+                    if ext in ('.jpg', '.jpeg'):
+                        mime = 'image/jpeg'
+                    elif ext in ('.png',):
+                        mime = 'image/png'
+                    elif ext in ('.bmp',):
+                        mime = 'image/bmp'
+                    elif ext in ('.tiff', '.tif'):
+                        mime = 'image/tiff'
+                    elif ext in ('.webp',):
+                        mime = 'image/webp'
+                    else:
+                        mime = 'image/png'
 
                     # 构建请求体
                     body: Dict[str, Any] = {
@@ -89,7 +109,7 @@ class BatchClient:
                             {
                                 "role": "user",
                                 "content": [
-                                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+                                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
                                     {"type": "text", "text": "只输出上述 JSON"},
                                 ],
                             },
@@ -107,6 +127,14 @@ class BatchClient:
                     # 使用自定义 ID 或默认文件名
                     custom_id = custom_ids[idx] if custom_ids else os.path.basename(image_path)
 
+                    # 去重：同一 batch 内 custom_id 必须唯一
+                    if custom_id in seen_ids:
+                        logger.warning(f"跳过 {image_path}（custom_id 重复: {custom_id}）")
+                        skipped_count += 1
+                        skipped_duplicate_ids.append(custom_id)
+                        continue
+                    seen_ids.add(custom_id)
+
                     # 构建请求行
                     request = {
                         "custom_id": custom_id,
@@ -121,10 +149,12 @@ class BatchClient:
                     if not self._check_line_size(line):
                         logger.warning(f"跳过 {image_path}（单行过大）")
                         skipped_count += 1
+                        skipped_oversize_ids.append(custom_id)
                         continue
 
                     f.write(line)
                     success_count += 1
+                    success_ids.append(custom_id)
 
                     if (idx + 1) % 100 == 0:
                         logger.info(f"已处理 {idx + 1}/{len(image_paths)} 张图片")
@@ -132,9 +162,20 @@ class BatchClient:
                 except Exception as e:
                     logger.error(f"处理 {image_path} 失败: {e}")
                     skipped_count += 1
+                    # 自定义ID可能无法索引（例如 custom_ids 长度不一致时已抛异常），此处保护性处理
+                    try:
+                        cid = custom_ids[idx] if custom_ids else os.path.basename(image_path)
+                    except Exception:
+                        cid = os.path.basename(image_path)
+                    skipped_error_ids.append(cid)
 
         logger.info(f"JSONL 生成完成: 成功 {success_count}, 跳过 {skipped_count}")
-        return success_count, skipped_count
+        return success_count, skipped_count, {
+            'success_ids': success_ids,
+            'skipped_oversize_ids': skipped_oversize_ids,
+            'skipped_error_ids': skipped_error_ids,
+            'skipped_duplicate_ids': skipped_duplicate_ids,
+        }
 
     def upload_file(self, jsonl_path: str) -> str:
         """
@@ -151,7 +192,7 @@ class BatchClient:
         logger.info(f"文件上传成功, file_id: {file_object.id}")
         return file_object.id
 
-    def create_batch(self, file_id: str, task_name: str = "", task_desc: str = "") -> str:
+    def create_batch(self, file_id: str, task_name: str = "", task_desc: str = "", metadata_extra: Optional[Dict[str, Any]] = None) -> str:
         """
         创建批量推理任务
 
@@ -160,11 +201,19 @@ class BatchClient:
         """
         logger.info(f"创建批量任务: file_id={file_id}")
 
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         if task_name:
             metadata['ds_name'] = task_name
         if task_desc:
             metadata['ds_description'] = task_desc
+        if metadata_extra:
+            try:
+                # 仅合并简单键值，避免覆盖关键字段
+                for k, v in metadata_extra.items():
+                    if v is not None:
+                        metadata[k] = v
+            except Exception:
+                pass
 
         batch = self.client.batches.create(
             input_file_id=file_id,
@@ -378,7 +427,7 @@ class BatchClient:
 
         # 1. 生成 JSONL
         jsonl_path = os.path.join(work_dir, 'batch_input.jsonl')
-        success_count, skipped_count = self.generate_jsonl(
+        success_count, skipped_count, _jsonl_info = self.generate_jsonl(
             image_paths=image_paths,
             system_prompt=system_prompt,
             model=model,
